@@ -1,0 +1,6 @@
+{
+  "name": "Dashboard Penilaian Tahfizh",
+  "description": "Dashboard interaktif untuk penilaian Tahfizh (Tahsin & Ziyadah) bersumber dari Google Sheets via Google Apps Script.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
