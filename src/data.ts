@@ -6,7 +6,7 @@ export const DEMO_SETORAN: Setoran[] = [
     grade: "2 Inter 1",
     nama: "Kean",
     tanggalSetoran: "2026-09-01",
-    kegiatan: "Tahsin",
+    kegiatan: "Tahsin (IQRA')",
     baris: 2,
     ctt: "Lancar",
     status: "Boleh Lanjut"
@@ -46,7 +46,7 @@ export const DEMO_SETORAN: Setoran[] = [
     grade: "2 Inter 1",
     nama: "Zaid",
     tanggalSetoran: "2026-09-03",
-    kegiatan: "Tahsin",
+    kegiatan: "Tahsin (IQRA')",
     baris: 4,
     ctt: "Lancar",
     status: "Boleh Lanjut"
@@ -66,7 +66,7 @@ export const DEMO_SETORAN: Setoran[] = [
     grade: "2 Inter 1",
     nama: "Farhan",
     tanggalSetoran: "2026-09-04",
-    kegiatan: "Tahsin",
+    kegiatan: "Murojaah",
     baris: 3,
     ctt: "Lancar",
     status: "Boleh Lanjut"
@@ -96,7 +96,7 @@ export const DEMO_SETORAN: Setoran[] = [
     grade: "2 Inter 2",
     nama: "Aisyah",
     tanggalSetoran: "2026-09-06",
-    kegiatan: "Tahsin",
+    kegiatan: "Tahsin (IQRA')",
     baris: 4,
     ctt: "Lancar",
     status: "Boleh Lanjut"
@@ -106,7 +106,7 @@ export const DEMO_SETORAN: Setoran[] = [
     grade: "2 Inter 1",
     nama: "Yusuf",
     tanggalSetoran: "2026-09-06",
-    kegiatan: "Ziyadah",
+    kegiatan: "Murojaah",
     baris: 7,
     ctt: "Sangat Lancar",
     status: "Boleh Lanjut"
@@ -116,7 +116,7 @@ export const DEMO_SETORAN: Setoran[] = [
     grade: "2 Inter 2",
     nama: "Fatimah",
     tanggalSetoran: "2026-09-07",
-    kegiatan: "Tahsin",
+    kegiatan: "Tahsin (IQRA')",
     baris: 3,
     ctt: "Lancar",
     status: "Boleh Lanjut"
@@ -191,39 +191,130 @@ function doGet(e) {
   return createJsonResponse({ status: "success", data: rows });
 }
 
-// Menangani permintaan POST: Menambah data penilaian baru dari Dashboard ke Google Sheets
+// Menangani permintaan POST: Menambah, mengubah, atau menghapus data penilaian dari Dashboard ke Google Sheets
 function doPost(e) {
   try {
     var postData = JSON.parse(e.postData.contents);
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = sheet.getDataRange().getValues();
+    var action = postData.action || "add";
     
-    // Tentukan nilai tanggal, default hari ini jika kosong
-    var tanggal = postData.tanggalSetoran;
-    if (!tanggal) {
-      tanggal = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+    // 1. TAMBAH DATA (ADD)
+    if (action === "add") {
+      var tanggal = postData.tanggalSetoran;
+      if (!tanggal) {
+        tanggal = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+      }
+      sheet.appendRow([
+        String(postData.id || ""),
+        String(postData.grade || ""),
+        String(postData.nama || ""),
+        tanggal,
+        String(postData.kegiatan || ""),
+        Number(postData.baris || 0),
+        String(postData.ctt || ""),
+        String(postData.status || "")
+      ]);
+      return createJsonResponse({ 
+        status: "success", 
+        message: "Alhamdulillah, data penilaian berhasil disimpan ke Google Sheets." 
+      });
+    } 
+    
+    // 2. EDIT & DELETE DATA
+    if (action === "edit" || action === "delete") {
+      var targetId = String(postData.originalId || postData.id || "").trim();
+      var targetNama = String(postData.originalNama || postData.nama || "").trim();
+      var targetTanggal = String(postData.originalTanggalSetoran || postData.tanggalSetoran || "").trim();
+      var targetKegiatan = String(postData.originalKegiatan || postData.kegiatan || "").trim();
+      
+      var foundRowIndex = -1;
+      
+      // Cari baris yang cocok (mulai dari bawah untuk mencari data terbaru terlebih dahulu)
+      for (var i = data.length - 1; i >= 1; i--) {
+        var row = data[i];
+        var rowId = String(row[0] !== undefined ? row[0] : "").trim();
+        var rowNama = String(row[2] !== undefined ? row[2] : "").trim();
+        
+        // Format tanggal baris
+        var rowDateStr = "";
+        var rawDate = row[3];
+        if (rawDate instanceof Date) {
+          rowDateStr = Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+        } else if (rawDate) {
+          rowDateStr = String(rawDate).trim();
+        }
+        
+        var rowKegiatan = String(row[4] !== undefined ? row[4] : "").trim();
+        
+        if (rowId === targetId && rowNama === targetNama && rowDateStr === targetTanggal && rowKegiatan === targetKegiatan) {
+          foundRowIndex = i + 1; // Apps Script baris berbasis 1-indexed
+          break;
+        }
+      }
+      
+      // Fallback pencarian jika nama ada sedikit ketidakcocokan
+      if (foundRowIndex === -1) {
+        for (var i = data.length - 1; i >= 1; i--) {
+          var row = data[i];
+          var rowId = String(row[0] !== undefined ? row[0] : "").trim();
+          var rowDateStr = "";
+          var rawDate = row[3];
+          if (rawDate instanceof Date) {
+            rowDateStr = Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+          } else if (rawDate) {
+            rowDateStr = String(rawDate).trim();
+          }
+          var rowKegiatan = String(row[4] !== undefined ? row[4] : "").trim();
+          
+          if (rowId === targetId && rowDateStr === targetTanggal && rowKegiatan === targetKegiatan) {
+            foundRowIndex = i + 1;
+            break;
+          }
+        }
+      }
+      
+      if (foundRowIndex === -1) {
+        return createJsonResponse({ 
+          status: "error", 
+          message: "Data tidak ditemukan di Google Sheets." 
+        });
+      }
+      
+      if (action === "delete") {
+        sheet.deleteRow(foundRowIndex);
+        return createJsonResponse({ 
+          status: "success", 
+          message: "Data penilaian berhasil dihapus dari Google Sheets." 
+        });
+      } else if (action === "edit") {
+        var tanggal = postData.tanggalSetoran;
+        if (!tanggal) {
+          tanggal = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+        }
+        
+        // Perbarui baris: ID (1), Grade (2), Nama (3), Tanggal (4), Kegiatan (5), Baris (6), Ctt (7), Status (8)
+        sheet.getRange(foundRowIndex, 1).setValue(String(postData.id || ""));
+        sheet.getRange(foundRowIndex, 2).setValue(String(postData.grade || ""));
+        sheet.getRange(foundRowIndex, 3).setValue(String(postData.nama || ""));
+        sheet.getRange(foundRowIndex, 4).setValue(tanggal);
+        sheet.getRange(foundRowIndex, 5).setValue(String(postData.kegiatan || ""));
+        sheet.getRange(foundRowIndex, 6).setValue(Number(postData.baris || 0));
+        sheet.getRange(foundRowIndex, 7).setValue(String(postData.ctt || ""));
+        sheet.getRange(foundRowIndex, 8).setValue(String(postData.status || ""));
+        
+        return createJsonResponse({ 
+          status: "success", 
+          message: "Data penilaian berhasil diperbarui di Google Sheets." 
+        });
+      }
     }
     
-    // Menambahkan baris baru ke Sheet: 
-    // ID (0), Grade (1), Nama (2), Tanggal (3), Kegiatan (4), Baris (5), Ctt (6), Status (7)
-    sheet.appendRow([
-      String(postData.id || ""),
-      String(postData.grade || ""),
-      String(postData.nama || ""),
-      tanggal,
-      String(postData.kegiatan || ""),
-      Number(postData.baris || 0),
-      String(postData.ctt || ""),
-      String(postData.status || "")
-    ]);
-    
-    return createJsonResponse({ 
-      status: "success", 
-      message: "Alhamdulillah, data penilaian berhasil disimpan ke Google Sheets." 
-    });
+    return createJsonResponse({ status: "error", message: "Aksi tidak dikenali." });
   } catch (error) {
     return createJsonResponse({ 
       status: "error", 
-      message: "Gagal menyimpan data: " + error.toString() 
+      message: "Gagal memproses data: " + error.toString() 
     });
   }
 }

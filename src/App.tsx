@@ -7,22 +7,24 @@ import {
   Search, 
   Filter, 
   RefreshCw, 
-  Database, 
   ChevronRight, 
   ArrowUpRight, 
   Sparkles,
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
   HelpCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { Setoran, Settings } from './types';
 import { DEMO_SETORAN } from './data';
 import { StatsCard } from './components/StatsCard';
-import { AppsScriptSettings } from './components/AppsScriptSettings';
 import { NewAssessmentForm } from './components/NewAssessmentForm';
 import { StudentDetailModal } from './components/StudentDetailModal';
 import { StatsCharts } from './components/StatsCharts';
+import { EditAssessmentModal } from './components/EditAssessmentModal';
+import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
 
 export default function App() {
   // 1. Core States
@@ -55,6 +57,10 @@ export default function App() {
 
   // Modal State for Individual Student History Drill-down
   const [selectedStudentName, setSelectedStudentName] = useState<string | null>(null);
+
+  // Modal State for Edit & Delete Assessment
+  const [itemToEdit, setItemToEdit] = useState<Setoran | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<Setoran | null>(null);
 
   // UI / Navigation / Tab State
   const [showConfig, setShowConfig] = useState<boolean>(false);
@@ -217,13 +223,131 @@ export default function App() {
     }
   };
 
+  // Edit existing assessment
+  const handleEditSetoran = async (original: Setoran, updated: Setoran): Promise<boolean> => {
+    if (usingDemoData || !settings.appsScriptUrl) {
+      // Offline Demo Mode: Update locally in memory
+      setSetoran((prev) =>
+        prev.map((item) =>
+          item.id === original.id &&
+          item.nama === original.nama &&
+          item.tanggalSetoran === original.tanggalSetoran &&
+          item.kegiatan === original.kegiatan
+            ? updated
+            : item
+        )
+      );
+      return true;
+    }
+
+    // Live Web App Mode: Submit edit via POST request
+    try {
+      const payload = {
+        ...updated,
+        action: 'edit',
+        originalId: original.id,
+        originalNama: original.nama,
+        originalTanggalSetoran: original.tanggalSetoran,
+        originalKegiatan: original.kegiatan,
+      };
+
+      const response = await fetch(settings.appsScriptUrl, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const res = await response.json();
+      if (res && res.status === 'success') {
+        // Refresh dashboard statistics from Google Sheets
+        await fetchDataFromSheets(settings.appsScriptUrl);
+        return true;
+      } else {
+        throw new Error(res.message || 'Gagal mengubah data.');
+      }
+    } catch (err) {
+      console.error('Error editing assessment:', err);
+      return false;
+    }
+  };
+
+  // Delete existing assessment
+  const handleDeleteSetoran = async (assessment: Setoran): Promise<boolean> => {
+    if (usingDemoData || !settings.appsScriptUrl) {
+      // Offline Demo Mode: Delete locally in memory
+      setSetoran((prev) =>
+        prev.filter(
+          (item) =>
+            !(
+              item.id === assessment.id &&
+              item.nama === assessment.nama &&
+              item.tanggalSetoran === assessment.tanggalSetoran &&
+              item.kegiatan === assessment.kegiatan
+            )
+        )
+      );
+      return true;
+    }
+
+    // Live Web App Mode: Submit delete via POST request
+    try {
+      const payload = {
+        action: 'delete',
+        id: assessment.id,
+        nama: assessment.nama,
+        tanggalSetoran: assessment.tanggalSetoran,
+        kegiatan: assessment.kegiatan,
+      };
+
+      const response = await fetch(settings.appsScriptUrl, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const res = await response.json();
+      if (res && res.status === 'success') {
+        // Refresh dashboard statistics from Google Sheets
+        await fetchDataFromSheets(settings.appsScriptUrl);
+        return true;
+      } else {
+        throw new Error(res.message || 'Gagal menghapus data.');
+      }
+    } catch (err) {
+      console.error('Error deleting assessment:', err);
+      return false;
+    }
+  };
+
   // 4. Filter logic
   const filteredSetoran = useMemo(() => {
     return setoran.filter((item) => {
       const matchesSearch = item.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             item.id.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesGrade = gradeFilter === 'All' || item.grade === gradeFilter;
-      const matchesKegiatan = kegiatanFilter === 'All' || item.kegiatan === kegiatanFilter;
+      
+      let matchesKegiatan = true;
+      if (kegiatanFilter !== 'All') {
+        const itemKegiatanLower = item.kegiatan.toLowerCase();
+        if (kegiatanFilter === 'Tahsin') {
+          matchesKegiatan = itemKegiatanLower.includes('tahsin') || itemKegiatanLower.includes('iqra');
+        } else if (kegiatanFilter === 'Ziyadah') {
+          matchesKegiatan = itemKegiatanLower.includes('ziyadah');
+        } else if (kegiatanFilter === 'Murojaah') {
+          matchesKegiatan = itemKegiatanLower.includes('murojaah');
+        } else {
+          matchesKegiatan = itemKegiatanLower === kegiatanFilter.toLowerCase();
+        }
+      }
+      
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       
       return matchesSearch && matchesGrade && matchesKegiatan && matchesStatus;
@@ -301,6 +425,22 @@ export default function App() {
         />
       )}
 
+      {/* Edit Assessment modal overlay */}
+      <EditAssessmentModal
+        isOpen={!!itemToEdit}
+        assessment={itemToEdit}
+        onClose={() => setItemToEdit(null)}
+        onSave={handleEditSetoran}
+      />
+
+      {/* Delete Confirmation modal overlay */}
+      <DeleteConfirmationModal
+        isOpen={!!itemToDelete}
+        assessment={itemToDelete}
+        onClose={() => setItemToDelete(null)}
+        onConfirm={handleDeleteSetoran}
+      />
+
       {/* Modern Banner Header */}
       <header id="dashboard-header" className="bg-gradient-to-r from-emerald-700 via-emerald-800 to-teal-800 text-white shadow-md relative overflow-hidden">
         {/* Subtle decorative background pattern */}
@@ -319,25 +459,12 @@ export default function App() {
                 Dashboard Penilaian Tahfizh
               </h1>
               <p className="text-emerald-100 text-xs sm:text-sm font-medium">
-                Sistem rekapitulasi evaluasi setoran hafalan (Tahsin & Ziyadah) terintegrasi langsung dengan Google Sheets.
+                Sistem rekapitulasi evaluasi setoran hafalan (Ziyadah, Murojaah, & Tahsin IQRA') terintegrasi langsung dengan Google Sheets.
               </p>
             </div>
 
-            {/* Quick Actions & Integration Toggle */}
+            {/* Quick Actions */}
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                id="btn-toggle-config-panel"
-                onClick={() => setShowConfig(!showConfig)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border duration-200 shadow-sm ${
-                  showConfig 
-                    ? 'bg-white text-emerald-800 border-white' 
-                    : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
-                }`}
-              >
-                <Database className="w-4 h-4" /> 
-                {showConfig ? 'Sembunyikan Integrasi' : 'Hubungkan Google Sheet'}
-              </button>
-
               <button
                 id="btn-sync-sheets"
                 onClick={handleManualSync}
@@ -356,21 +483,6 @@ export default function App() {
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-5 space-y-6">
-        
-        {/* Settings and Instruction panel (visible when toggled) */}
-        {showConfig && (
-          <div className="animate-slide-down">
-            <AppsScriptSettings
-              settings={settings}
-              onSaveSettings={handleSaveSettings}
-              connectionStatus={connectionStatus}
-              errorMessage={errorMessage}
-              onTestConnection={async () => { await fetchDataFromSheets(settings.appsScriptUrl); }}
-              onUseDemoData={handleUseDemoData}
-              usingDemoData={usingDemoData}
-            />
-          </div>
-        )}
 
         {/* Overview KPI widgets card row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -511,8 +623,9 @@ export default function App() {
                     onChange={(e) => setKegiatanFilter(e.target.value)}
                   >
                     <option value="All">Semua Kegiatan</option>
-                    <option value="Tahsin">Tahsin</option>
                     <option value="Ziyadah">Ziyadah</option>
+                    <option value="Murojaah">Murojaah</option>
+                    <option value="Tahsin">Tahsin (IQRA')</option>
                   </select>
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Filter className="w-3 h-3" />
@@ -550,12 +663,13 @@ export default function App() {
                     <th className="py-3 px-4 text-center">Baris</th>
                     <th className="py-3 px-4">Catatan</th>
                     <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {paginatedData.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-400 italic font-medium">
+                      <td colSpan={8} className="py-12 text-center text-slate-400 italic font-medium">
                         Tidak ada data penilaian yang cocok dengan filter pencarian
                       </td>
                     </tr>
@@ -588,8 +702,10 @@ export default function App() {
                         </td>
                         <td className="py-3 px-4">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.kegiatan === 'Ziyadah'
+                            item.kegiatan.toLowerCase().includes('ziyadah')
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                              : item.kegiatan.toLowerCase().includes('murojaah')
+                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
                               : 'bg-blue-50 text-blue-700 border border-blue-100'
                           }`}>
                             {item.kegiatan}
@@ -607,6 +723,30 @@ export default function App() {
                           }`}>
                             {item.status}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setItemToEdit(item);
+                              }}
+                              className="p-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer shadow-xs"
+                              title="Ubah Penilaian"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setItemToDelete(item);
+                              }}
+                              className="p-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-rose-750 hover:bg-rose-50 hover:border-rose-200 transition-all cursor-pointer shadow-xs"
+                              title="Hapus Penilaian"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))

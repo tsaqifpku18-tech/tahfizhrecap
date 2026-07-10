@@ -7,13 +7,16 @@ interface StatsChartsProps {
 }
 
 export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
-  // 1. Calculate Kegiatan (Tahsin vs Ziyadah)
+  // 1. Calculate Kegiatan (Ziyadah vs Murojaah vs Tahsin)
   const total = data.length;
-  const tahsinCount = data.filter((x) => x.kegiatan.toLowerCase().includes('tahsin')).length;
   const ziyadahCount = data.filter((x) => x.kegiatan.toLowerCase().includes('ziyadah')).length;
+  const murojaahCount = data.filter((x) => x.kegiatan.toLowerCase().includes('murojaah')).length;
+  const tahsinCount = data.filter((x) => x.kegiatan.toLowerCase().includes('tahsin') || x.kegiatan.toLowerCase().includes('iqra')).length;
 
-  const tahsinPct = total > 0 ? Math.round((tahsinCount / total) * 100) : 0;
   const ziyadahPct = total > 0 ? Math.round((ziyadahCount / total) * 100) : 0;
+  const murojaahPct = total > 0 ? Math.round((murojaahCount / total) * 100) : 0;
+  // Ensure the percentages add up nicely or use direct calculation
+  const tahsinPct = total > 0 ? Math.round((tahsinCount / total) * 100) : 0;
 
   // 2. Calculate Status (Boleh Lanjut vs Ulangi)
   const lanjutCount = data.filter((x) => x.status.toLowerCase().includes('lanjut')).length;
@@ -189,32 +192,41 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
       {/* 2. Comparative Assessment breakdowns (Kegiatan & Status) */}
       <div id="chart-assessments-breakdown" className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-6">
         
-        {/* 2A. Kegiatan: Tahsin vs Ziyadah */}
+        {/* 2A. Kegiatan: Ziyadah vs Murojaah vs Tahsin (IQRA') */}
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <BookOpen className="w-4 h-4 text-blue-600" /> Distribusi Kegiatan
+            <BookOpen className="w-4 h-4 text-emerald-600" /> Distribusi Kegiatan
           </h3>
           <div className="space-y-2">
             <div className="flex justify-between items-center text-xs font-semibold">
-              <span className="text-slate-500">Tahsin ({tahsinCount} setoran)</span>
-              <span className="text-blue-600">{tahsinPct}%</span>
+              <span className="text-slate-500">📖 Ziyadah ({ziyadahCount} setoran)</span>
+              <span className="text-emerald-600">{ziyadahPct}%</span>
             </div>
             <div className="flex justify-between items-center text-xs font-semibold">
-              <span className="text-slate-500">Ziyadah ({ziyadahCount} setoran)</span>
-              <span className="text-emerald-600">{ziyadahPct}%</span>
+              <span className="text-slate-500">🔁 Murojaah ({murojaahCount} setoran)</span>
+              <span className="text-indigo-600">{murojaahPct}%</span>
+            </div>
+            <div className="flex justify-between items-center text-xs font-semibold">
+              <span className="text-slate-500">✍️ Tahsin (IQRA') ({tahsinCount} setoran)</span>
+              <span className="text-blue-600">{tahsinPct}%</span>
             </div>
             
             {/* Split Bar Chart */}
             <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
               <div
-                className="bg-blue-500 h-full transition-all duration-500"
-                style={{ width: `${tahsinPct}%` }}
-                title={`Tahsin: ${tahsinPct}%`}
-              ></div>
-              <div
                 className="bg-emerald-500 h-full transition-all duration-500"
                 style={{ width: `${ziyadahPct}%` }}
                 title={`Ziyadah: ${ziyadahPct}%`}
+              ></div>
+              <div
+                className="bg-indigo-500 h-full transition-all duration-500"
+                style={{ width: `${murojaahPct}%` }}
+                title={`Murojaah: ${murojaahPct}%`}
+              ></div>
+              <div
+                className="bg-blue-500 h-full transition-all duration-500"
+                style={{ width: `${tahsinPct}%` }}
+                title={`Tahsin (IQRA'): ${tahsinPct}%`}
               ></div>
             </div>
           </div>

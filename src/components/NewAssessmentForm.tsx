@@ -27,7 +27,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
     const dd = String(today.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   });
-  const [kegiatan, setKegiatan] = useState<'Tahsin' | 'Ziyadah'>('Ziyadah');
+  const [kegiatan, setKegiatan] = useState<'Tahsin (IQRA\')' | 'Ziyadah' | 'Murojaah' | string>('Ziyadah');
   const [baris, setBaris] = useState<number>(3);
   const [ctt, setCtt] = useState('Lancar');
   const [status, setStatus] = useState<'Boleh Lanjut' | 'Ulangi'>('Boleh Lanjut');
@@ -257,30 +257,42 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Jenis Kegiatan
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                id="btn-activity-tahsin"
-                type="button"
-                className={`py-2 px-4 text-xs font-bold rounded-xl border transition-all ${
-                  kegiatan === 'Tahsin'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200 ring-2 ring-blue-500/10'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-                onClick={() => setKegiatan('Tahsin')}
-              >
-                Tahsin (Perbaikan)
-              </button>
+            <div className="grid grid-cols-3 gap-2">
               <button
                 id="btn-activity-ziyadah"
                 type="button"
-                className={`py-2 px-4 text-xs font-bold rounded-xl border transition-all ${
+                className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all ${
                   kegiatan === 'Ziyadah'
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-2 ring-emerald-500/10'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                 }`}
                 onClick={() => setKegiatan('Ziyadah')}
               >
-                Ziyadah (Hafalan Baru)
+                📖 Ziyadah
+              </button>
+              <button
+                id="btn-activity-murojaah"
+                type="button"
+                className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all ${
+                  kegiatan === 'Murojaah'
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 ring-2 ring-indigo-500/10'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+                onClick={() => setKegiatan('Murojaah')}
+              >
+                🔁 Murojaah
+              </button>
+              <button
+                id="btn-activity-tahsin"
+                type="button"
+                className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all ${
+                  kegiatan === "Tahsin (IQRA')" || kegiatan === 'Tahsin'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200 ring-2 ring-blue-500/10'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+                onClick={() => setKegiatan("Tahsin (IQRA')")}
+              >
+                ✍️ Tahsin (IQRA')
               </button>
             </div>
           </div>
