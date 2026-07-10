@@ -33,22 +33,24 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Settings state (Loaded from localStorage with fallback to environment variable)
+  // Default Google Apps Script URL set by the developer
+  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbylYGhvs89qRNr44hIe7WSGfVlPor-GOnZTxJtSIrYKdVisU7YH14rntr-fy9haR3eG/exec';
+
+  // Settings state (Loaded from localStorage with fallback to default Apps Script URL)
   const [settings, setSettings] = useState<Settings>(() => {
-    const defaultUrl = (import.meta as any).env?.VITE_APPS_SCRIPT_URL || '';
     const saved = localStorage.getItem('tahfizh_settings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         return {
-          appsScriptUrl: parsed.appsScriptUrl || defaultUrl,
+          appsScriptUrl: DEFAULT_APPS_SCRIPT_URL, // Always override/use the default URL set by the developer
           sheetName: parsed.sheetName || 'Sheet1',
         };
       } catch (e) {
         console.error('Failed to parse settings', e);
       }
     }
-    return { appsScriptUrl: defaultUrl, sheetName: 'Sheet1' };
+    return { appsScriptUrl: DEFAULT_APPS_SCRIPT_URL, sheetName: 'Sheet1' };
   });
 
   // Modal State for Individual Student History Drill-down
@@ -192,7 +194,9 @@ export default function App() {
         mode: 'cors',
         redirect: 'follow',
         headers: {
-          'Content-Type': 'application/json',
+          // Bypasses CORS preflight failure by using text/plain.
+          // Google Apps Script can still parse it using JSON.parse(e.postData.contents).
+          'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify(recordWithId),
       });
@@ -208,7 +212,6 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error submitting assessment:', err);
-      // Fallback: Append locally and show warning, or return false to indicate sheets error
       setIsSubmitting(false);
       return false;
     }

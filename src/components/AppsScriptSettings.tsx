@@ -22,17 +22,8 @@ export const AppsScriptSettings: React.FC<AppsScriptSettingsProps> = ({
   onUseDemoData,
   usingDemoData,
 }) => {
-  const [urlInput, setUrlInput] = useState(settings.appsScriptUrl);
   const [isCopied, setIsCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'instructions' | 'code'>('instructions');
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSaveSettings({
-      ...settings,
-      appsScriptUrl: urlInput.trim(),
-    });
-  };
 
   const handleCopyCode = async () => {
     try {
@@ -78,34 +69,25 @@ export const AppsScriptSettings: React.FC<AppsScriptSettingsProps> = ({
         </div>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-3">
+      <div className="space-y-3">
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-            Link Web App Google Apps Script
+            Link Web App Google Apps Script (Dikelola oleh Developer)
           </label>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <input
                 id="apps-script-url-input"
                 type="url"
-                className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700 font-mono transition-all"
-                placeholder="https://script.google.com/macros/s/.../exec"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
+                readOnly
+                className="w-full pl-3 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 text-slate-500 font-mono cursor-not-allowed outline-none"
+                value={settings.appsScriptUrl}
               />
-              {urlInput && (
-                <button
-                  type="button"
-                  onClick={() => setUrlInput('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-medium"
-                >
-                  Bersihkan
-                </button>
-              )}
             </div>
             <button
-              id="btn-save-settings"
-              type="submit"
+              id="btn-test-connection"
+              type="button"
+              onClick={() => onTestConnection()}
               disabled={connectionStatus === 'connecting'}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition-colors duration-200 shadow-sm flex items-center justify-center gap-2 disabled:bg-emerald-400"
             >
@@ -114,10 +96,13 @@ export const AppsScriptSettings: React.FC<AppsScriptSettingsProps> = ({
                   <RefreshCw className="w-4 h-4 animate-spin" /> Menghubungkan...
                 </>
               ) : (
-                'Simpan & Tes'
+                'Tes Koneksi'
               )}
             </button>
           </div>
+          <p className="text-[11px] text-slate-500 mt-2 font-medium">
+            🔒 Konfigurasi URL Google Apps Script telah dikunci oleh developer agar sistem selalu terhubung dengan database utama yang aman.
+          </p>
           {errorMessage && (
             <p className="text-xs text-rose-600 font-medium mt-2 flex items-center gap-1.5">
               <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {errorMessage}
@@ -147,7 +132,7 @@ export const AppsScriptSettings: React.FC<AppsScriptSettingsProps> = ({
             </button>
           )}
         </div>
-      </form>
+      </div>
 
       {/* Tabs for Guide and Script Code */}
       <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50">
