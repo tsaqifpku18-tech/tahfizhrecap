@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Calendar, BookOpen, Star, TrendingUp, Compass, Award, Heart } from 'lucide-react';
 import { Setoran } from '../types';
+import { getSatuanByKegiatan } from '../data';
 
 interface StudentDetailModalProps {
   studentName: string;
@@ -83,12 +84,12 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
               <p className="text-lg font-extrabold text-slate-700">{totalSubmissions}x</p>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center space-y-1">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Total Baris</span>
-              <p className="text-lg font-extrabold text-slate-700">{totalLines} baris</p>
+              <span className="text-[10px] uppercase font-bold text-slate-400">Total Baris/Hal</span>
+              <p className="text-lg font-extrabold text-slate-700">{totalLines}</p>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center space-y-1">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Rerata Baris</span>
-              <p className="text-lg font-extrabold text-slate-700">{avgLines} / setoran</p>
+              <span className="text-[10px] uppercase font-bold text-slate-400">Rerata Baris/Hal</span>
+              <p className="text-lg font-extrabold text-slate-700">{avgLines}</p>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center space-y-1">
               <span className="text-[10px] uppercase font-bold text-slate-400">Tingkat Lolos</span>
@@ -134,10 +135,10 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-center space-y-2">
               <h4 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-emerald-500" /> Catatan Terakhir
+                <TrendingUp className="w-4 h-4 text-emerald-500" /> Nilai Terakhir
               </h4>
               <p className="text-sm italic text-slate-600 font-medium">
-                "{studentHistory[0]?.ctt || 'Tidak ada catatan'}"
+                "{studentHistory[0]?.ctt || 'Tidak ada nilai'}"
               </p>
               <div className="text-xs text-slate-400">
                 Disetor pada {studentHistory[0]?.tanggalSetoran ? new Date(studentHistory[0].tanggalSetoran).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
@@ -161,11 +162,26 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        item.kegiatan === 'Ziyadah' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
+                        item.kegiatan === 'Ziyadah'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          : item.kegiatan === 'Tahsin (Tilawah)'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                          : item.kegiatan === "Tahsin (IQRA')"
+                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                          : item.kegiatan === 'Tahsin (Qoidah)'
+                          ? 'bg-violet-50 text-violet-700 border-violet-100'
+                          : item.kegiatan === 'Murojaah'
+                          ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                          : 'bg-blue-50/70 text-blue-800 border border-blue-100'
                       }`}>
                         {item.kegiatan}
                       </span>
-                      <span className="font-semibold text-slate-700">{item.baris} Baris</span>
+                      <span className="font-semibold text-slate-700 capitalize">{item.baris} {item.satuan || getSatuanByKegiatan(item.kegiatan)}</span>
+                      {item.surah && (
+                        <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-lg text-[10px] font-bold">
+                          {item.surah}
+                        </span>
+                      )}
                       <span className="text-slate-400 text-[11px]">
                         {new Date(item.tanggalSetoran).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                       </span>

@@ -14,17 +14,64 @@ import {
   ChevronRight as ChevronRightIcon,
   HelpCircle,
   FileSpreadsheet,
-  Edit3,
-  Trash2
+  Trash2,
+  Pencil,
+  Loader2,
+  LogOut,
+  Lock,
+  UserCheck
 } from 'lucide-react';
-import { Setoran, Settings } from './types';
-import { DEMO_SETORAN } from './data';
+import { Setoran, Settings, UserSession } from './types';
+import { DEMO_SETORAN, getSatuanByKegiatan } from './data';
 import { StatsCard } from './components/StatsCard';
 import { NewAssessmentForm } from './components/NewAssessmentForm';
 import { StudentDetailModal } from './components/StudentDetailModal';
 import { StatsCharts } from './components/StatsCharts';
-import { EditAssessmentModal } from './components/EditAssessmentModal';
-import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
+import { LoginPage } from './components/LoginPage';
+
+// Helper function to format date to dd MMMM yyyy (Indonesian)
+const formatTanggalIndo = (tanggalStr: string): string => {
+  if (!tanggalStr) return '-';
+  
+  // Try directly parsing first
+  let date = new Date(tanggalStr);
+  
+  // Fallback for custom parsing if date is invalid
+  if (isNaN(date.getTime())) {
+    return tanggalStr;
+  }
+  
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  
+  return `${day} ${month} ${year}`;
+};
+
+// Helper to perform smart and robust name matching between student profile name (e.g., from Akun sheet) and evaluation name (e.g., from Penilaian sheet)
+const isStudentNameMatched = (setoranName: string, studentProfileName: string): boolean => {
+  const sName = (setoranName || '').toLowerCase().trim();
+  const pName = (studentProfileName || '').toLowerCase().trim();
+  
+  if (!sName || !pName) return false;
+  if (sName === pName) return true;
+  
+  // Check if one contains the other
+  if (sName.includes(pName) || pName.includes(sName)) return true;
+  
+  // Split names into individual words and filter out small filler words (length <= 2)
+  const sWords = sName.split(/\s+/).filter(w => w.length > 2);
+  const pWords = pName.split(/\s+/).filter(w => w.length > 2);
+  
+  // If there are words in common (e.g. "Azzam Malik" and "Azzam"), it is a match
+  return sWords.some(w => pWords.includes(w));
+};
+
 
 export default function App() {
   // 1. Core States
@@ -34,9 +81,35 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [editingSetoran, setEditingSetoran] = useState<Setoran | null>(null);
+  const [confirmDeleteRecord, setConfirmDeleteRecord] = useState<Setoran | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // Session State (Loaded from localStorage)
+  const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
+    const savedSession = localStorage.getItem('tahfizh_user_session');
+    if (savedSession) {
+      try {
+        return JSON.parse(savedSession);
+      } catch (e) {
+        console.error('Failed to parse user session', e);
+      }
+    }
+    return null;
+  });
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('tahfizh_user_session');
+  };
+
+  const handleLoginSuccess = (session: UserSession) => {
+    setCurrentUser(session);
+    localStorage.setItem('tahfizh_user_session', JSON.stringify(session));
+  };
 
   // Default Google Apps Script URL set by the developer
-  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbylYGhvs89qRNr44hIe7WSGfVlPor-GOnZTxJtSIrYKdVisU7YH14rntr-fy9haR3eG/exec';
+  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx6P7dfuAD3AleS7yvK7ce5YagAaDKm8mLBKOLZgBuhPujlHlSJZxTkMDZEf-PV_6Lz/exec';
 
   // Settings state (Loaded from localStorage with fallback to default Apps Script URL)
   const [settings, setSettings] = useState<Settings>(() => {
@@ -58,10 +131,6 @@ export default function App() {
   // Modal State for Individual Student History Drill-down
   const [selectedStudentName, setSelectedStudentName] = useState<string | null>(null);
 
-  // Modal State for Edit & Delete Assessment
-  const [itemToEdit, setItemToEdit] = useState<Setoran | null>(null);
-  const [itemToDelete, setItemToDelete] = useState<Setoran | null>(null);
-
   // UI / Navigation / Tab State
   const [showConfig, setShowConfig] = useState<boolean>(false);
 
@@ -77,9 +146,13 @@ export default function App() {
 
   // 3. Dynamic Filtering Lists
   const uniqueGrades = useMemo(() => {
-    const grades = setoran.map((s) => s.grade).filter(Boolean);
+    const isStudent = currentUser && currentUser.role === 'siswa';
+    const sourceData = isStudent
+      ? setoran.filter((s) => isStudentNameMatched(s.nama, currentUser.nama))
+      : setoran;
+    const grades = sourceData.map((s) => s.grade).filter(Boolean);
     return ['All', ...Array.from(new Set(grades))];
-  }, [setoran]);
+  }, [setoran, currentUser]);
 
   // Fetch data from Google Apps Script Web App
   const fetchDataFromSheets = async (url: string): Promise<boolean> => {
@@ -223,34 +296,20 @@ export default function App() {
     }
   };
 
-  // Edit existing assessment
-  const handleEditSetoran = async (original: Setoran, updated: Setoran): Promise<boolean> => {
+  // Update existing assessment
+  const handleUpdateSetoran = async (updatedRecord: Setoran): Promise<boolean> => {
+    setIsSubmitting(true);
+    
     if (usingDemoData || !settings.appsScriptUrl) {
       // Offline Demo Mode: Update locally in memory
-      setSetoran((prev) =>
-        prev.map((item) =>
-          item.id === original.id &&
-          item.nama === original.nama &&
-          item.tanggalSetoran === original.tanggalSetoran &&
-          item.kegiatan === original.kegiatan
-            ? updated
-            : item
-        )
-      );
+      setSetoran((prev) => prev.map((s) => s.id === updatedRecord.id ? updatedRecord : s));
+      setIsSubmitting(false);
+      setEditingSetoran(null);
       return true;
     }
 
-    // Live Web App Mode: Submit edit via POST request
+    // Live Web App Mode: Submit via POST request with action: "edit"
     try {
-      const payload = {
-        ...updated,
-        action: 'edit',
-        originalId: original.id,
-        originalNama: original.nama,
-        originalTanggalSetoran: original.tanggalSetoran,
-        originalKegiatan: original.kegiatan,
-      };
-
       const response = await fetch(settings.appsScriptUrl, {
         method: 'POST',
         mode: 'cors',
@@ -258,51 +317,42 @@ export default function App() {
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...updatedRecord,
+          action: 'edit'
+        }),
       });
 
       const res = await response.json();
       if (res && res.status === 'success') {
         // Refresh dashboard statistics from Google Sheets
         await fetchDataFromSheets(settings.appsScriptUrl);
+        setIsSubmitting(false);
+        setEditingSetoran(null);
         return true;
       } else {
-        throw new Error(res.message || 'Gagal mengubah data.');
+        throw new Error(res.message || 'Gagal memperbarui data.');
       }
     } catch (err) {
-      console.error('Error editing assessment:', err);
+      console.error('Error updating assessment:', err);
+      setIsSubmitting(false);
       return false;
     }
   };
 
-  // Delete existing assessment
-  const handleDeleteSetoran = async (assessment: Setoran): Promise<boolean> => {
+  // Delete assessment
+  const handleDeleteSetoran = async (recordToDelete: Setoran): Promise<boolean> => {
     if (usingDemoData || !settings.appsScriptUrl) {
       // Offline Demo Mode: Delete locally in memory
-      setSetoran((prev) =>
-        prev.filter(
-          (item) =>
-            !(
-              item.id === assessment.id &&
-              item.nama === assessment.nama &&
-              item.tanggalSetoran === assessment.tanggalSetoran &&
-              item.kegiatan === assessment.kegiatan
-            )
-        )
-      );
+      setSetoran((prev) => prev.filter((s) => s.id !== recordToDelete.id));
+      if (editingSetoran?.id === recordToDelete.id) {
+        setEditingSetoran(null);
+      }
       return true;
     }
 
-    // Live Web App Mode: Submit delete via POST request
+    // Live Web App Mode: Submit via POST request with action: "delete"
     try {
-      const payload = {
-        action: 'delete',
-        id: assessment.id,
-        nama: assessment.nama,
-        tanggalSetoran: assessment.tanggalSetoran,
-        kegiatan: assessment.kegiatan,
-      };
-
       const response = await fetch(settings.appsScriptUrl, {
         method: 'POST',
         mode: 'cors',
@@ -310,13 +360,19 @@ export default function App() {
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          id: recordToDelete.id,
+          action: 'delete'
+        }),
       });
 
       const res = await response.json();
       if (res && res.status === 'success') {
         // Refresh dashboard statistics from Google Sheets
         await fetchDataFromSheets(settings.appsScriptUrl);
+        if (editingSetoran?.id === recordToDelete.id) {
+          setEditingSetoran(null);
+        }
         return true;
       } else {
         throw new Error(res.message || 'Gagal menghapus data.');
@@ -330,29 +386,23 @@ export default function App() {
   // 4. Filter logic
   const filteredSetoran = useMemo(() => {
     return setoran.filter((item) => {
+      const isStudent = currentUser && currentUser.role === 'siswa';
+      if (isStudent && !isStudentNameMatched(item.nama, currentUser.nama)) {
+        return false;
+      }
+
       const matchesSearch = item.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             item.id.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesGrade = gradeFilter === 'All' || item.grade === gradeFilter;
-      
-      let matchesKegiatan = true;
-      if (kegiatanFilter !== 'All') {
-        const itemKegiatanLower = item.kegiatan.toLowerCase();
-        if (kegiatanFilter === 'Tahsin') {
-          matchesKegiatan = itemKegiatanLower.includes('tahsin') || itemKegiatanLower.includes('iqra');
-        } else if (kegiatanFilter === 'Ziyadah') {
-          matchesKegiatan = itemKegiatanLower.includes('ziyadah');
-        } else if (kegiatanFilter === 'Murojaah') {
-          matchesKegiatan = itemKegiatanLower.includes('murojaah');
-        } else {
-          matchesKegiatan = itemKegiatanLower === kegiatanFilter.toLowerCase();
-        }
-      }
-      
+      const matchesKegiatan = kegiatanFilter === 'All' || 
+                              (kegiatanFilter === 'Tahsin'
+                                ? item.kegiatan === 'Tahsin' || item.kegiatan.toLowerCase().includes('tahsin (')
+                                : item.kegiatan === kegiatanFilter);
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       
       return matchesSearch && matchesGrade && matchesKegiatan && matchesStatus;
     });
-  }, [setoran, searchQuery, gradeFilter, kegiatanFilter, statusFilter]);
+  }, [setoran, searchQuery, gradeFilter, kegiatanFilter, statusFilter, currentUser]);
 
   // Selected Student Drill-down History
   const studentHistory = useMemo(() => {
@@ -413,6 +463,16 @@ export default function App() {
     setCurrentPage(1);
   }, [searchQuery, gradeFilter, kegiatanFilter, statusFilter]);
 
+  if (!currentUser) {
+    return (
+      <LoginPage
+        appsScriptUrl={settings.appsScriptUrl}
+        usingDemoData={usingDemoData}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-16">
       
@@ -425,22 +485,6 @@ export default function App() {
         />
       )}
 
-      {/* Edit Assessment modal overlay */}
-      <EditAssessmentModal
-        isOpen={!!itemToEdit}
-        assessment={itemToEdit}
-        onClose={() => setItemToEdit(null)}
-        onSave={handleEditSetoran}
-      />
-
-      {/* Delete Confirmation modal overlay */}
-      <DeleteConfirmationModal
-        isOpen={!!itemToDelete}
-        assessment={itemToDelete}
-        onClose={() => setItemToDelete(null)}
-        onConfirm={handleDeleteSetoran}
-      />
-
       {/* Modern Banner Header */}
       <header id="dashboard-header" className="bg-gradient-to-r from-emerald-700 via-emerald-800 to-teal-800 text-white shadow-md relative overflow-hidden">
         {/* Subtle decorative background pattern */}
@@ -450,16 +494,22 @@ export default function App() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             
             <div className="space-y-1.5">
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="bg-emerald-500/20 text-emerald-300 text-xs font-extrabold tracking-widest px-3 py-1 rounded-full uppercase border border-emerald-400/30 flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5" /> Portal Tahfizh Qur'an
+                </span>
+                
+                {/* Active User Session Indicator */}
+                <span className="bg-white/10 text-emerald-100 text-[11px] font-semibold px-3 py-1 rounded-full border border-white/10 flex items-center gap-1">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-300" />
+                  Profil: <strong className="text-white font-bold">{currentUser.nama}</strong> ({currentUser.role === 'ustadz' ? 'Ustadz' : 'Siswa'})
                 </span>
               </div>
               <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white">
                 Dashboard Penilaian Tahfizh
               </h1>
               <p className="text-emerald-100 text-xs sm:text-sm font-medium">
-                Sistem rekapitulasi evaluasi setoran hafalan (Ziyadah, Murojaah, & Tahsin IQRA') terintegrasi langsung dengan Google Sheets.
+                Sistem rekapitulasi evaluasi setoran hafalan (Tahsin & Ziyadah) terintegrasi langsung dengan Google Sheets.
               </p>
             </div>
 
@@ -474,6 +524,17 @@ export default function App() {
               >
                 <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
                 {isSyncing ? 'Refreshing...' : usingDemoData ? 'Refresh Database Contoh' : 'Refresh Database'}
+              </button>
+
+              {/* Log Out Button */}
+              <button
+                id="btn-logout"
+                onClick={handleLogout}
+                className="bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex items-center gap-2"
+                title="Keluar dari Akun Anda"
+              >
+                <LogOut className="w-4 h-4" />
+                Keluar
               </button>
             </div>
 
@@ -530,13 +591,54 @@ export default function App() {
         {/* Content Bento Grid: Form & Student Table with search/filters */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Column 1: Input Assessment Form */}
+          {/* Column 1: Input Assessment Form or Student Profile Progress Card */}
           <div className="lg:col-span-1 space-y-6">
-            <NewAssessmentForm
-              onAddSetoran={handleAddSetoran}
-              activeStudents={activeStudentsList}
-              isSubmitting={isSubmitting}
-            />
+            {currentUser.role === 'ustadz' ? (
+              <NewAssessmentForm
+                onAddSetoran={handleAddSetoran}
+                activeStudents={activeStudentsList}
+                isSubmitting={isSubmitting}
+                editingRecord={editingSetoran}
+                onUpdateSetoran={handleUpdateSetoran}
+                onCancelEdit={() => setEditingSetoran(null)}
+              />
+            ) : (
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-6">
+                <div className="border-b border-slate-100 pb-5 text-center">
+                  <div className="inline-flex bg-emerald-150 text-emerald-800 p-4 rounded-full mb-3 border-4 border-emerald-50">
+                    <UserCheck className="w-8 h-8 text-emerald-600" />
+                  </div>
+                  <h3 className="text-xl font-extrabold text-slate-800">{currentUser.nama}</h3>
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 mt-2 uppercase tracking-wider">
+                    <Sparkles className="w-3 h-3 text-emerald-600" /> Akun Siswa Aktif
+                  </span>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ringkasan Hafalan Anda</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center">
+                      <span className="block text-2xl font-black text-slate-800">{dashboardStats.totalSetoran}</span>
+                      <span className="text-[10px] text-slate-400 font-medium">Total Setoran</span>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center">
+                      <span className="block text-2xl font-black text-emerald-600">{dashboardStats.lancarRate}%</span>
+                      <span className="text-[10px] text-slate-400 font-medium font-sans">Kelancaran</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl space-y-2 text-xs text-emerald-800">
+                  <h5 className="font-bold text-emerald-900">Motivasi Hari Ini:</h5>
+                  <p className="italic leading-relaxed">
+                    "Sebaik-baik kalian adalah orang yang belajar Al-Qur'an dan mengajarkannya." (HR. Bukhari)
+                  </p>
+                  <p className="leading-relaxed pt-2 border-t border-emerald-100/30 text-[11px]">
+                    Tetap istiqomah dalam memelihara hafalanmu. Pastikan setiap bimbingan ustadz dicatat & dipelajari kembali dengan baik.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Column 2 & 3: Table and Filters */}
@@ -624,8 +726,11 @@ export default function App() {
                   >
                     <option value="All">Semua Kegiatan</option>
                     <option value="Ziyadah">Ziyadah</option>
+                    <option value="Tahsin (Tilawah)">Tahsin (Tilawah)</option>
+                    <option value="Tahsin (IQRA')">Tahsin (IQRA')</option>
+                    <option value="Tahsin (Qoidah)">Tahsin (Qoidah)</option>
                     <option value="Murojaah">Murojaah</option>
-                    <option value="Tahsin">Tahsin (IQRA')</option>
+                    <option value="Tahsin">Semua Tahsin</option>
                   </select>
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <Filter className="w-3 h-3" />
@@ -656,20 +761,23 @@ export default function App() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider">
-                    <th className="py-3 px-4">Siswa</th>
+                    <th className="py-3 px-4 text-center">ID</th>
                     <th className="py-3 px-4">Grade</th>
-                    <th className="py-3 px-4">Tanggal</th>
+                    <th className="py-3 px-4">Nama</th>
+                    <th className="py-3 px-4">Tanggal Setoran</th>
+                    <th className="py-3 px-4">Surah</th>
                     <th className="py-3 px-4">Kegiatan</th>
-                    <th className="py-3 px-4 text-center">Baris</th>
-                    <th className="py-3 px-4">Catatan</th>
+                    <th className="py-3 px-4 text-center">Jumlah</th>
+                    <th className="py-3 px-4">Nilai</th>
+                    <th className="py-3 px-4 text-center">Satuan</th>
                     <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-center">Aksi</th>
+                    {currentUser.role === 'ustadz' && <th className="py-3 px-4 text-center">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {paginatedData.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400 italic font-medium">
+                      <td colSpan={currentUser.role === 'ustadz' ? 11 : 10} className="py-12 text-center text-slate-400 italic font-medium">
                         Tidak ada data penilaian yang cocok dengan filter pencarian
                       </td>
                     </tr>
@@ -682,40 +790,48 @@ export default function App() {
                         onClick={() => setSelectedStudentName(item.nama)}
                         title="Klik untuk melihat riwayat siswa"
                       >
+                        <td className="py-3 px-4 text-center font-mono text-[10px] text-slate-400 font-medium">{item.id}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-600">{item.grade}</td>
                         <td className="py-3 px-4">
                           <div className="flex items-center space-x-2.5">
-                            <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-700 font-extrabold flex items-center justify-center border border-emerald-100 uppercase shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-700 font-extrabold flex items-center justify-center border border-emerald-100 uppercase shrink-0 text-xs">
                               {item.nama.substring(0, 2)}
                             </div>
-                            <div>
-                              <div className="font-bold text-slate-800 flex items-center gap-1 group-hover:text-emerald-700 transition-colors">
-                                {item.nama}
-                                <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-600 transition-opacity" />
-                              </div>
-                              <div className="text-[10px] text-slate-400 font-mono font-medium">ID: {item.id}</div>
+                            <div className="font-bold text-slate-800 flex items-center gap-1 group-hover:text-emerald-700 transition-colors">
+                              {item.nama}
+                              <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-600 transition-opacity" />
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-4 font-semibold text-slate-600">{item.grade}</td>
-                        <td className="py-3 px-4 text-slate-500">
-                          {new Date(item.tanggalSetoran).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
+                          {formatTanggalIndo(item.tanggalSetoran)}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 font-semibold text-slate-700 truncate max-w-[140px]" title={item.surah}>
+                          {item.surah || '-'}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.kegiatan.toLowerCase().includes('ziyadah')
+                            item.kegiatan === 'Ziyadah'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                              : item.kegiatan.toLowerCase().includes('murojaah')
+                              : item.kegiatan === 'Tahsin (Tilawah)'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                              : item.kegiatan === "Tahsin (IQRA')"
                               ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                              : 'bg-blue-50 text-blue-700 border border-blue-100'
+                              : item.kegiatan === 'Tahsin (Qoidah)'
+                              ? 'bg-violet-50 text-violet-700 border-violet-100'
+                              : item.kegiatan === 'Murojaah'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                              : 'bg-blue-50/70 text-blue-800 border border-blue-100'
                           }`}>
                             {item.kegiatan}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center font-bold text-slate-700">{item.baris}</td>
-                        <td className="py-3 px-4 text-slate-500 max-w-[120px] truncate italic" title={item.ctt}>
-                          "{item.ctt}"
+                        <td className="py-3 px-4 text-slate-500 max-w-[150px] truncate font-medium" title={item.ctt}>
+                          {item.ctt || '-'}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-4 text-center font-semibold text-slate-500 capitalize whitespace-nowrap">{item.satuan || getSatuanByKegiatan(item.kegiatan)}</td>
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             item.status === 'Boleh Lanjut'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -724,30 +840,38 @@ export default function App() {
                             {item.status}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setItemToEdit(item);
-                              }}
-                              className="p-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer shadow-xs"
-                              title="Ubah Penilaian"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setItemToDelete(item);
-                              }}
-                              className="p-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-rose-750 hover:bg-rose-50 hover:border-rose-200 transition-all cursor-pointer shadow-xs"
-                              title="Hapus Penilaian"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
+                        {currentUser.role === 'ustadz' && (
+                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center space-x-1.5">
+                              <button
+                                id={`btn-edit-setoran-${item.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingSetoran(item);
+                                  const formEl = document.getElementById('new-assessment-form');
+                                  if (formEl) {
+                                    formEl.scrollIntoView({ behavior: 'smooth' });
+                                  }
+                                }}
+                                className="p-1.5 hover:bg-amber-50 text-slate-400 hover:text-amber-600 rounded-lg transition-colors border border-transparent hover:border-amber-200"
+                                title="Edit Penilaian"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                id={`btn-delete-setoran-${item.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteRecord(item);
+                                }}
+                                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                                title="Hapus Penilaian"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}
@@ -791,6 +915,66 @@ export default function App() {
         </div>
 
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteRecord && (
+        <div id="modal-delete-confirmation" className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 transition-all duration-300">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-3 bg-rose-50 rounded-2xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Hapus Penilaian</h3>
+                <p className="text-xs text-slate-500 font-medium">Tindakan ini tidak dapat dibatalkan</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs text-slate-600 font-sans">
+              <div className="flex justify-between"><span className="font-semibold text-slate-400">Nama Siswa:</span> <span className="font-bold text-slate-800">{confirmDeleteRecord.nama}</span></div>
+              <div className="flex justify-between"><span className="font-semibold text-slate-400">Kegiatan:</span> <span className="font-bold text-slate-800">{confirmDeleteRecord.kegiatan}</span></div>
+              <div className="flex justify-between"><span className="font-semibold text-slate-400">Tanggal:</span> <span className="font-bold text-slate-800">{new Date(confirmDeleteRecord.tanggalSetoran).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+              {confirmDeleteRecord.surah && <div className="flex justify-between"><span className="font-semibold text-slate-400">Surah/Bab:</span> <span className="font-bold text-slate-800">{confirmDeleteRecord.surah}</span></div>}
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed font-sans">
+              Apakah Anda yakin ingin menghapus data penilaian ini? Jika terhubung dengan Google Sheets, baris data ini juga akan terhapus dari spreadsheet Anda.
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                id="btn-confirm-delete-cancel"
+                onClick={() => setConfirmDeleteRecord(null)}
+                disabled={isDeleting}
+                className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-colors text-xs disabled:opacity-50 font-sans"
+              >
+                Batal
+              </button>
+              <button
+                id="btn-confirm-delete-submit"
+                onClick={async () => {
+                  setIsDeleting(true);
+                  const success = await handleDeleteSetoran(confirmDeleteRecord);
+                  setIsDeleting(false);
+                  if (success) {
+                    setConfirmDeleteRecord(null);
+                  }
+                }}
+                disabled={isDeleting}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-sm transition-colors text-xs flex items-center justify-center gap-1.5 disabled:bg-rose-400 font-sans"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Menghapus...
+                  </>
+                ) : (
+                  'Ya, Hapus Data'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

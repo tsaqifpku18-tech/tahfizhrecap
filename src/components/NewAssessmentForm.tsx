@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, CheckCircle2, AlertCircle, Loader2, Sparkles, Smile, Frown, Users } from 'lucide-react';
+import { Plus, CheckCircle2, AlertCircle, Loader2, Sparkles, Smile, Frown, Users, Pencil, X } from 'lucide-react';
 import { Setoran } from '../types';
+import { getSatuanByKegiatan } from '../data';
 
 interface NewAssessmentFormProps {
   onAddSetoran: (newSetoran: Omit<Setoran, 'id'> & { id?: string }) => Promise<boolean>;
   activeStudents: { id: string; nama: string; grade: string }[];
   isSubmitting: boolean;
+  editingRecord?: Setoran | null;
+  onUpdateSetoran?: (updatedSetoran: Setoran) => Promise<boolean>;
+  onCancelEdit?: () => void;
 }
 
 export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
   onAddSetoran,
   activeStudents,
   isSubmitting,
+  editingRecord,
+  onUpdateSetoran,
+  onCancelEdit,
 }) => {
   const [isNewStudent, setIsNewStudent] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -27,7 +34,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
     const dd = String(today.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   });
-  const [kegiatan, setKegiatan] = useState<'Tahsin (IQRA\')' | 'Ziyadah' | 'Murojaah' | string>('Ziyadah');
+  const [kegiatan, setKegiatan] = useState<string>('Ziyadah');
+  const [surah, setSurah] = useState('');
   const [baris, setBaris] = useState<number>(3);
   const [ctt, setCtt] = useState('Lancar');
   const [status, setStatus] = useState<'Boleh Lanjut' | 'Ulangi'>('Boleh Lanjut');
@@ -45,8 +53,36 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
     'Makhorijul Huruf Baik'
   ];
 
+  // Auto fill when editing a record
+  useEffect(() => {
+    if (editingRecord) {
+      setId(editingRecord.id);
+      setNama(editingRecord.nama);
+      setGrade(editingRecord.grade);
+      setTanggalSetoran(editingRecord.tanggalSetoran);
+      setKegiatan(editingRecord.kegiatan);
+      setSurah(editingRecord.surah || '');
+      setBaris(editingRecord.baris);
+      setCtt(editingRecord.ctt);
+      setStatus(editingRecord.status as 'Boleh Lanjut' | 'Ulangi');
+      setIsNewStudent(false);
+      setSelectedStudentId(editingRecord.id);
+    } else {
+      setSelectedStudentId('');
+      setIsNewStudent(false);
+      setId('');
+      setNama('');
+      setGrade('');
+      setSurah('');
+      setBaris(3);
+      setCtt('Lancar');
+      setStatus('Boleh Lanjut');
+    }
+  }, [editingRecord]);
+
   // Auto fill when choosing an existing student
   useEffect(() => {
+    if (editingRecord) return; // Skip during editing mode
     if (!isNewStudent && selectedStudentId) {
       const student = activeStudents.find((s) => s.id === selectedStudentId);
       if (student) {
@@ -61,7 +97,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
       setNama('');
       setGrade('');
     }
-  }, [selectedStudentId, isNewStudent, activeStudents]);
+  }, [selectedStudentId, isNewStudent, activeStudents, editingRecord]);
 
   // Adjust Status based on Catatan selection
   const handleCttSelect = (val: string) => {
@@ -100,39 +136,57 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
       baris,
       ctt,
       status,
+      surah: surah.trim(),
+      satuan: getSatuanByKegiatan(kegiatan),
     };
 
-    const success = await onAddSetoran(payload);
-    if (success) {
-      setFormSuccess(true);
-      // Reset form variables
-      if (isNewStudent) {
-        setNama('');
-        setGrade('');
+    if (editingRecord && onUpdateSetoran) {
+      const success = await onUpdateSetoran({ ...payload, id: editingRecord.id });
+      if (success) {
+        setFormSuccess(true);
+        if (onCancelEdit) onCancelEdit();
+        setTimeout(() => setFormSuccess(false), 4000);
       } else {
-        setSelectedStudentId('');
+        setFormError('Gagal memperbarui data penilaian. Periksa koneksi Anda.');
       }
-      setBaris(3);
-      setCtt('Lancar');
-      setStatus('Boleh Lanjut');
-      
-      // Clear success notification after 4s
-      setTimeout(() => setFormSuccess(false), 4000);
     } else {
-      setFormError('Gagal mengirimkan data ke Google Sheets. Periksa koneksi Anda.');
+      const success = await onAddSetoran(payload);
+      if (success) {
+        setFormSuccess(true);
+        // Reset form variables
+        if (isNewStudent) {
+          setNama('');
+          setGrade('');
+        } else {
+          setSelectedStudentId('');
+        }
+        setSurah('');
+        setBaris(3);
+        setCtt('Lancar');
+        setStatus('Boleh Lanjut');
+        
+        // Clear success notification after 4s
+        setTimeout(() => setFormSuccess(false), 4000);
+      } else {
+        setFormError('Gagal mengirimkan data ke Google Sheets. Periksa koneksi Anda.');
+      }
     }
   };
 
   return (
-    <div id="new-assessment-form" className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+    <div id="new-assessment-form" className={`bg-white rounded-3xl p-6 shadow-sm border transition-all duration-300 ${editingRecord ? 'border-amber-300 shadow-md ring-2 ring-amber-500/5' : 'border-slate-200'}`}>
       <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-5">
         <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl">
-            <Plus className="w-5 h-5" />
+          <div className={`p-2.5 rounded-2xl ${editingRecord ? 'bg-amber-50 text-amber-600 animate-pulse' : 'bg-emerald-50 text-emerald-600'}`}>
+            {editingRecord ? <Pencil className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-800">Catat Penilaian Baru</h2>
-            <p className="text-xs text-slate-500">Input setoran hafalan siswa hari ini</p>
+            <h2 className="text-lg font-bold text-slate-800">
+              {editingRecord ? 'Ubah Penilaian Siswa' : 'Catat Penilaian Baru'}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {editingRecord ? `Mengubah setoran untuk ${editingRecord.nama}` : 'Input setoran hafalan siswa hari ini'}
+            </p>
           </div>
         </div>
       </div>
@@ -238,7 +292,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
           </div>
         </div>
 
-        {/* Date and Activity Type */}
+        {/* Date and Surah */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -255,46 +309,85 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
 
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Jenis Kegiatan
+              Surah / Bab
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                id="btn-activity-ziyadah"
-                type="button"
-                className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all ${
-                  kegiatan === 'Ziyadah'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-2 ring-emerald-500/10'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-                onClick={() => setKegiatan('Ziyadah')}
-              >
-                📖 Ziyadah
-              </button>
-              <button
-                id="btn-activity-murojaah"
-                type="button"
-                className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all ${
-                  kegiatan === 'Murojaah'
-                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 ring-2 ring-indigo-500/10'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-                onClick={() => setKegiatan('Murojaah')}
-              >
-                🔁 Murojaah
-              </button>
-              <button
-                id="btn-activity-tahsin"
-                type="button"
-                className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all ${
-                  kegiatan === "Tahsin (IQRA')" || kegiatan === 'Tahsin'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200 ring-2 ring-blue-500/10'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-                onClick={() => setKegiatan("Tahsin (IQRA')")}
-              >
-                ✍️ Tahsin (IQRA')
-              </button>
-            </div>
+            <input
+              id="input-submission-surah"
+              type="text"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              value={surah}
+              onChange={(e) => setSurah(e.target.value)}
+              placeholder="e.g. An-Naba' 1-10, Iqra 4"
+            />
+          </div>
+        </div>
+
+        {/* Jenis Kegiatan */}
+        <div>
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+            Jenis Kegiatan
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <button
+              id="btn-activity-ziyadah"
+              type="button"
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+                kegiatan === 'Ziyadah'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-2 ring-emerald-500/10'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              onClick={() => setKegiatan('Ziyadah')}
+            >
+              Ziyadah (Hafalan Baru)
+            </button>
+            <button
+              id="btn-activity-tahsin-tilawah"
+              type="button"
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+                kegiatan === 'Tahsin (Tilawah)'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 ring-2 ring-blue-500/10'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              onClick={() => setKegiatan('Tahsin (Tilawah)')}
+            >
+              Tahsin (Tilawah)
+            </button>
+            <button
+              id="btn-activity-tahsin-iqra"
+              type="button"
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+                kegiatan === "Tahsin (IQRA')"
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 ring-2 ring-indigo-500/10'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              onClick={() => setKegiatan("Tahsin (IQRA')")}
+            >
+              Tahsin (IQRA')
+            </button>
+            <button
+              id="btn-activity-tahsin-qoidah"
+              type="button"
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+                kegiatan === 'Tahsin (Qoidah)'
+                  ? 'bg-violet-50 text-violet-700 border-violet-200 ring-2 ring-violet-500/10'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              onClick={() => setKegiatan('Tahsin (Qoidah)')}
+            >
+              Tahsin (Qoidah)
+            </button>
+            <button
+              id="btn-activity-murojaah"
+              type="button"
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all col-span-2 sm:col-span-1 lg:col-span-1 ${
+                kegiatan === 'Murojaah'
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 ring-2 ring-amber-500/10'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+              onClick={() => setKegiatan('Murojaah')}
+            >
+              Murojaah
+            </button>
           </div>
         </div>
 
@@ -302,7 +395,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Jumlah Baris
+              Jumlah {getSatuanByKegiatan(kegiatan) === 'halaman' ? 'Halaman' : 'Baris'}
             </label>
             <div className="flex items-center gap-2">
               <button
@@ -329,7 +422,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               >
                 +
               </button>
-              <span className="text-xs text-slate-400 font-medium">Baris</span>
+              <span className="text-xs text-slate-400 font-medium capitalize">{getSatuanByKegiatan(kegiatan)}</span>
             </div>
           </div>
 
@@ -369,7 +462,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
         {/* Catatan Field with Quick Shortcuts */}
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-            Catatan Penilaian (Ctt)
+            Nilai / Catatan (Ctt)
           </label>
           <input
             id="input-notes-text"
@@ -377,7 +470,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 mb-2"
             value={ctt}
             onChange={(e) => setCtt(e.target.value)}
-            placeholder="Tulis catatan kelancaran atau tajwid..."
+            placeholder="Tulis nilai kelancaran atau tajwid..."
           />
           <div className="flex flex-wrap gap-1.5">
             {feedbackOptions.map((opt) => (
@@ -404,7 +497,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <div id="form-success-alert" className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-3 text-xs flex items-start gap-2 mb-3">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold">Alhamdulillah!</span> Data setoran hafalan berhasil dicatat dan disinkronisasikan ke database.
+                <span className="font-bold">Alhamdulillah!</span> Data setoran hafalan berhasil {editingRecord ? 'diperbarui' : 'dicatat'} dan disinkronisasikan ke database.
               </div>
             </div>
           )}
@@ -418,22 +511,38 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             </div>
           )}
 
-          <button
-            id="btn-submit-assessment"
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm transition-colors duration-200 shadow-sm flex items-center justify-center gap-2 disabled:bg-emerald-400"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Sedang Mengirim ke Google Sheets...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" /> Simpan Penilaian Tahfizh
-              </>
+          <div className="flex gap-2">
+            {editingRecord && (
+              <button
+                id="btn-cancel-edit-assessment"
+                type="button"
+                onClick={onCancelEdit}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-sm transition-colors duration-200 flex items-center justify-center gap-2 border border-slate-200"
+              >
+                <X className="w-4 h-4" /> Batal
+              </button>
             )}
-          </button>
+            <button
+              id="btn-submit-assessment"
+              type="submit"
+              disabled={isSubmitting}
+              className={`font-bold py-3 rounded-xl text-sm transition-colors duration-200 shadow-sm flex items-center justify-center gap-2 ${
+                editingRecord 
+                  ? 'flex-[2] bg-amber-600 hover:bg-amber-700 text-white disabled:bg-amber-400' 
+                  : 'w-full bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-emerald-400'
+              }`}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> {editingRecord ? 'Memperbarui...' : 'Sedang Mengirim ke Google Sheets...'}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" /> {editingRecord ? 'Simpan Perubahan' : 'Simpan Penilaian Tahfizh'}
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </form>
     </div>

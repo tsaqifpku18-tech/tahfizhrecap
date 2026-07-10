@@ -7,6 +7,8 @@ export interface Setoran {
   baris: number;
   ctt: string; // Catatan: "Lancar", "Kurang Lancar", etc.
   status: 'Boleh Lanjut' | 'Ulangi' | string;
+  surah?: string; // Nama surah/materi yang disetorkan
+  satuan?: string; // Satuan kegiatan (baris / halaman)
 }
 
 export interface Settings {
@@ -20,3 +22,16 @@ export interface DashboardStats {
   lancarRate: number;
   avgBaris: number;
 }
+
+export interface UserAccount {
+  id: string;
+  nama: string;
+  password?: string;
+}
+
+export interface UserSession {
+  id: string;
+  nama: string;
+  role: 'ustadz' | 'siswa';
+}
+
