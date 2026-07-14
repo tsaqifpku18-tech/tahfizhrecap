@@ -35,3 +35,12 @@ export interface UserSession {
   role: 'ustadz' | 'siswa';
 }
 
+export interface TugasHarian {
+  id: string;
+  tanggal: string; // YYYY-MM-DD
+  grade: string;   // e.g. "All", "2 Inter 3"
+  materi: string;  // e.g. "Murojaah Juz 30"
+  ustadz: string;  // Name of assigner
+  keterangan: string; // Additional instructions
+}
+

@@ -1,4 +1,4 @@
-import { Setoran, UserAccount } from './types';
+import { Setoran, UserAccount, TugasHarian } from './types';
 
 export function getSatuanByKegiatan(kegiatan: string): string {
   const k = kegiatan.toLowerCase();
@@ -184,6 +184,33 @@ export const DEMO_AKUN: UserAccount[] = [
   { id: "student_rania", nama: "Rania", password: "rania123" }
 ];
 
+export const DEMO_TUGAS_HARIAN: TugasHarian[] = [
+  {
+    id: "t1",
+    tanggal: "2026-07-13",
+    grade: "2 Inter 1",
+    materi: "Ziyadah Surah Al-Ghashiyah baris 1-10",
+    ustadz: "Ustadz Ahmad",
+    keterangan: "Mohon diulang-ulang minimal 15 kali sebelum disetorkan besok pagi."
+  },
+  {
+    id: "t2",
+    tanggal: "2026-07-13",
+    grade: "2 Inter 2",
+    materi: "Murojaah Surah An-Naba & An-Nazi'at",
+    ustadz: "Ustadzah Rania",
+    keterangan: "Lancar dan mutqin untuk evaluasi pekanan."
+  },
+  {
+    id: "t3",
+    tanggal: "2026-07-12",
+    grade: "All",
+    materi: "Adab terhadap orang tua dan guru",
+    ustadz: "Ustadz Ahmad",
+    keterangan: "Pelajari dan amalkan adab ke-4 di buku saku."
+  }
+];
+
 export const GOOGLE_APPS_SCRIPT_CODE = `/**
  * Google Apps Script untuk Dashboard Penilaian Tahfizh & Sistem Login
  * Tempatkan kode ini di Google Sheets -> Ekstensi (Extensions) -> Apps Script
@@ -238,6 +265,62 @@ function doGet(e) {
       });
     }
     return createJsonResponse({ status: "success", data: accounts });
+  }
+
+  // JIKA PERMINTAAN DATA TUGAS HARIAN
+  if (tabParam === "tugas" || tabParam === "tugas_harian" || tabParam === "tugasharian") {
+    var sheetTugas = ss.getSheetByName("Tugas Harian") || ss.getSheetByName("tugas_harian") || ss.getSheetByName("Tugas") || ss.getSheetByName("tugas");
+    if (!sheetTugas) {
+      // Jika tab belum ada, return data kosong
+      return createJsonResponse({ status: "success", data: [] });
+    }
+    
+    var data = sheetTugas.getDataRange().getValues();
+    if (data.length <= 1) {
+      return createJsonResponse({ status: "success", data: [] });
+    }
+    
+    var headers = data[0];
+    var idIdx = 0;
+    var tanggalIdx = 1;
+    var gradeIdx = 2;
+    var materiIdx = 3;
+    var ustadzIdx = 4;
+    var ketIdx = 5;
+    
+    for (var h = 0; h < headers.length; h++) {
+      var headerStr = String(headers[h]).toLowerCase().trim();
+      if (headerStr === "id") idIdx = h;
+      else if (headerStr === "tanggal" || headerStr === "tgl") tanggalIdx = h;
+      else if (headerStr === "grade" || headerStr === "kelas") gradeIdx = h;
+      else if (headerStr === "materi" || headerStr === "tugas") materiIdx = h;
+      else if (headerStr === "ustadz" || headerStr === "guru" || headerStr === "pembuat") ustadzIdx = h;
+      else if (headerStr === "keterangan" || headerStr === "ket" || headerStr === "catatan") ketIdx = h;
+    }
+    
+    var tasks = [];
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      if (!row[materiIdx]) continue;
+      
+      var rawDate = row[tanggalIdx];
+      var formattedDate = "";
+      if (rawDate instanceof Date) {
+        formattedDate = Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+      } else if (rawDate) {
+        formattedDate = String(rawDate).trim();
+      }
+      
+      tasks.push({
+        id: String(row[idIdx] !== undefined ? row[idIdx] : "").trim(),
+        tanggal: formattedDate,
+        grade: String(row[gradeIdx] !== undefined ? row[gradeIdx] : "").trim(),
+        materi: String(row[materiIdx] !== undefined ? row[materiIdx] : "").trim(),
+        ustadz: String(row[ustadzIdx] !== undefined ? row[ustadzIdx] : "").trim(),
+        keterangan: String(row[ketIdx] !== undefined ? row[ketIdx] : "").trim()
+      });
+    }
+    return createJsonResponse({ status: "success", data: tasks });
   }
 
   // JIKA PERMINTAAN DATA SETORAN (DEFAULT)
@@ -325,13 +408,84 @@ function doGet(e) {
   return createJsonResponse({ status: "success", data: rows });
 }
 
-// Menangani permintaan POST: Menambah (create), Mengedit (edit), atau Menghapus (delete) data penilaian dari Dashboard ke Google Sheets
+// Menangani permintaan POST: Menambah (create), Mengedit (edit), atau Menghapus (delete) data penilaian/tugas dari Dashboard ke Google Sheets
 function doPost(e) {
   try {
     var postData = JSON.parse(e.postData.contents);
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var targetTab = (postData.targetTab || "").toLowerCase().trim();
+    var sheet;
+    
+    // Tentukan sheet berdasarkan targetTab
+    if (targetTab === "tugas" || targetTab === "tugas_harian" || targetTab === "tugasharian") {
+      sheet = ss.getSheetByName("Tugas Harian") || ss.getSheetByName("tugas_harian") || ss.getSheetByName("Tugas") || ss.getSheetByName("tugas");
+      if (!sheet) {
+        // Buat sheet Tugas Harian jika belum ada
+        sheet = ss.insertSheet("Tugas Harian");
+        sheet.appendRow(["ID", "Tanggal", "Grade", "Materi", "Ustadz", "Keterangan"]);
+      }
+    } else {
+      sheet = ss.getSheetByName("Penilaian") || ss.getSheetByName("penilaian") || ss.getSheets()[0];
+    }
+    
     var action = postData.action || "create";
     
+    // JIKA AKSI TUGAS HARIAN
+    if (targetTab === "tugas" || targetTab === "tugas_harian" || targetTab === "tugasharian") {
+      if (action === "create") {
+        var tanggal = postData.tanggal || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+        sheet.appendRow([
+          String(postData.id || ""),
+          tanggal,
+          String(postData.grade || ""),
+          String(postData.materi || ""),
+          String(postData.ustadz || ""),
+          String(postData.keterangan || "")
+        ]);
+        return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil ditambahkan." });
+      } else if (action === "edit") {
+        var data = sheet.getDataRange().getValues();
+        var idToFind = String(postData.id || "").trim();
+        var foundRow = -1;
+        for (var i = 1; i < data.length; i++) {
+          if (String(data[i][0]).trim() === idToFind) {
+            foundRow = i + 1;
+            break;
+          }
+        }
+        if (foundRow !== -1) {
+          sheet.getRange(foundRow, 1, 1, 6).setValues([[
+            idToFind,
+            String(postData.tanggal || ""),
+            String(postData.grade || ""),
+            String(postData.materi || ""),
+            String(postData.ustadz || ""),
+            String(postData.keterangan || "")
+          ]]);
+          return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil diperbarui." });
+        } else {
+          return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
+        }
+      } else if (action === "delete") {
+        var data = sheet.getDataRange().getValues();
+        var idToFind = String(postData.id || "").trim();
+        var foundRow = -1;
+        for (var i = 1; i < data.length; i++) {
+          if (String(data[i][0]).trim() === idToFind) {
+            foundRow = i + 1;
+            break;
+          }
+        }
+        if (foundRow !== -1) {
+          sheet.deleteRow(foundRow);
+          return createJsonResponse({ status: "success", message: "Tugas harian berhasil dihapus." });
+        } else {
+          return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
+        }
+      }
+    }
+    
+    // JIKA AKSI PENILAIAN (DEFAULT)
     var postSatuan = postData.satuan;
     if (!postSatuan) {
       var kLower = String(postData.kegiatan || "").toLowerCase();
@@ -460,7 +614,7 @@ function createJsonResponse(obj) {
 export const APPS_SCRIPT_INSTRUCTIONS = `### Cara Menghubungkan Google Sheet Anda & Sistem Akun:
 
 1. **Buat Google Sheet Baru** atau buka yang sudah ada.
-2. Buat **Dua Tab / Sheet**:
+2. Buat **Tiga Tab / Sheet**:
    * **Tab ke-1 bernama "Penilaian"** (atau biarkan default sebagai sheet pertama) dengan header kolom sebagai berikut:
      * **Kolom A:** \`ID\`
      * **Kolom B:** \`Grade\`
@@ -476,7 +630,14 @@ export const APPS_SCRIPT_INSTRUCTIONS = `### Cara Menghubungkan Google Sheet And
      * **Kolom A:** \`ID\` (Jika mengandung kata 'Ustadz', misal: 'ustadz_ahmad', maka dapat melihat semua data. Jika tidak, hanya melihat data dirinya sendiri)
      * **Kolom B:** \`Namaa\` (Untuk profil siswa / ustadz)
      * **Kolom C:** \`Password\` (Sandi login siswa / ustadz)
-3. Isi beberapa baris data awal di kedua tab sebagai contoh (misal di tab Akun: \`ID: ustadz1, Namaa: Ustadz Ahmad, Password: password123\` dan \`ID: student_kean, Namaa: Kean, Password: kean123\`).
+   * **Tab ke-3 bernama "Tugas Harian"** (atau "tugas_harian") dengan header kolom sebagai berikut:
+     * **Kolom A:** \`ID\`
+     * **Kolom B:** \`Tanggal\` (Format: yyyy-mm-dd atau dd/mmmm/yyyy)
+     * **Kolom C:** \`Grade\` (Kelas sasaran, e.g. "2 Inter 1", atau "All" jika untuk semua kelas)
+     * **Kolom D:** \`Materi\` (Isi tugas, e.g. "Murojaah Juz 30")
+     * **Kolom E:** \`Ustadz\` (Nama ustadz pemberi tugas)
+     * **Kolom F:** \`Keterangan\` (Catatan tambahan)
+3. Isi beberapa baris data awal di tab tersebut sebagai contoh (misal di tab Akun: \`ID: ustadz1, Namaa: Ustadz Ahmad, Password: password123\` dan \`ID: student_kean, Namaa: Kean, Password: kean123\`).
 4. Klik menu **Ekstensi** (Extensions) di bagian atas, lalu pilih **Apps Script**.
 5. Hapus semua kode default di dalam editor Google Apps Script, lalu **Paste** kode yang telah kami siapkan di tab sebelah.
 6. Klik ikon **Simpan** (Floppy disk) atau tekan \`Ctrl + S\`.

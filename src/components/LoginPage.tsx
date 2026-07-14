@@ -119,11 +119,11 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
             <BookOpen className="w-10 h-10 animate-pulse" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold tracking-tight text-slate-800 flex items-center justify-center gap-1.5">
-          <Sparkles className="w-5 h-5 text-emerald-600" /> Portal Tahfizh Qur'an
+        <h2 className="mt-6 text-center text-2xl font-extrabold tracking-tight text-slate-800 flex items-center justify-center gap-1.5">
+          <Sparkles className="w-5 h-5 text-emerald-600" /> Ahlan wa Sahlan Abu/Ummu..
         </h2>
         <p className="mt-2 text-center text-xs sm:text-sm text-slate-500 font-medium">
-          Sistem Rekapitulasi Evaluasi & Setoran Hafalan Siswa
+          Tahfizh Recap Online. Terupadate. Tersistematis. Terbaik di Indonesia
         </p>
       </div>
 

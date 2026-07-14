@@ -19,10 +19,13 @@ import {
   Loader2,
   LogOut,
   Lock,
-  UserCheck
+  UserCheck,
+  ClipboardList,
+  Calendar,
+  Plus
 } from 'lucide-react';
-import { Setoran, Settings, UserSession } from './types';
-import { DEMO_SETORAN, getSatuanByKegiatan } from './data';
+import { Setoran, Settings, UserSession, TugasHarian } from './types';
+import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE } from './data';
 import { StatsCard } from './components/StatsCard';
 import { NewAssessmentForm } from './components/NewAssessmentForm';
 import { StudentDetailModal } from './components/StudentDetailModal';
@@ -76,7 +79,22 @@ const isStudentNameMatched = (setoranName: string, studentProfileName: string): 
 export default function App() {
   // 1. Core States
   const [setoran, setSetoran] = useState<Setoran[]>(DEMO_SETORAN);
+  const [tugasHarian, setTugasHarian] = useState<TugasHarian[]>(DEMO_TUGAS_HARIAN);
+  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas'>('rekap');
+  const [editingTugas, setEditingTugas] = useState<TugasHarian | null>(null);
+  const [isSubmittingTugas, setIsSubmittingTugas] = useState<boolean>(false);
+  const [confirmDeleteTugas, setConfirmDeleteTugas] = useState<TugasHarian | null>(null);
+  
   const [usingDemoData, setUsingDemoData] = useState<boolean>(true);
+  
+  // Tugas Harian Form state
+  const [tugasFormTanggal, setTugasFormTanggal] = useState<string>(() => {
+    return new Date().toISOString().substring(0, 10);
+  });
+  const [tugasFormGrade, setTugasFormGrade] = useState<string>('All');
+  const [tugasFormMateri, setTugasFormMateri] = useState<string>('');
+  const [tugasFormUstadz, setTugasFormUstadz] = useState<string>('');
+  const [tugasFormKeterangan, setTugasFormKeterangan] = useState<string>('');
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -154,6 +172,33 @@ export default function App() {
     return ['All', ...Array.from(new Set(grades))];
   }, [setoran, currentUser]);
 
+  // Fetch Tugas Harian data from Google Apps Script Web App
+  const fetchTugasHarian = async (url: string): Promise<void> => {
+    if (!url) return;
+    try {
+      const separator = url.includes('?') ? '&' : '?';
+      const response = await fetch(`${url}${separator}tab=tugas`, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      if (response.ok) {
+        const res = await response.json();
+        if (res && res.status === 'success' && Array.isArray(res.data)) {
+          // Sort tasks descending by date
+          const sortedTasks = res.data.sort((a: TugasHarian, b: TugasHarian) => {
+            return new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime();
+          });
+          setTugasHarian(sortedTasks);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch Tugas Harian:', err);
+    }
+  };
+
   // Fetch data from Google Apps Script Web App
   const fetchDataFromSheets = async (url: string): Promise<boolean> => {
     if (!url) {
@@ -185,6 +230,7 @@ export default function App() {
         });
         
         setSetoran(sortedData);
+        await fetchTugasHarian(url);
         setConnectionStatus('connected');
         setUsingDemoData(false);
         return true;
@@ -234,6 +280,7 @@ export default function App() {
       await new Promise((resolve) => setTimeout(resolve, 800));
       // Trigger a state reload
       setSetoran((prev) => [...prev]);
+      setTugasHarian((prev) => [...prev]);
     } else {
       await fetchDataFromSheets(settings.appsScriptUrl);
     }
@@ -243,6 +290,7 @@ export default function App() {
   // Use Demo Data Offline
   const handleUseDemoData = () => {
     setSetoran(DEMO_SETORAN);
+    setTugasHarian(DEMO_TUGAS_HARIAN);
     setUsingDemoData(true);
     setConnectionStatus('disconnected');
     setErrorMessage('');
@@ -342,6 +390,11 @@ export default function App() {
 
   // Delete assessment
   const handleDeleteSetoran = async (recordToDelete: Setoran): Promise<boolean> => {
+    if (!currentUser || !currentUser.nama.toLowerCase().includes('ustadz')) {
+      console.error('Unauthorized deletion attempt.');
+      return false;
+    }
+
     if (usingDemoData || !settings.appsScriptUrl) {
       // Offline Demo Mode: Delete locally in memory
       setSetoran((prev) => prev.filter((s) => s.id !== recordToDelete.id));
@@ -383,6 +436,138 @@ export default function App() {
     }
   };
 
+  // Add new Tugas Harian
+  const handleAddTugas = async (newTugas: Omit<TugasHarian, 'id'> & { id?: string }): Promise<boolean> => {
+    setIsSubmittingTugas(true);
+    const finalId = newTugas.id || String(Math.floor(1000000 + Math.random() * 9000000));
+    const recordWithId: TugasHarian = {
+      ...newTugas,
+      id: finalId,
+    };
+
+    if (usingDemoData || !settings.appsScriptUrl) {
+      setTugasHarian((prev) => [recordWithId, ...prev]);
+      setIsSubmittingTugas(false);
+      return true;
+    }
+
+    try {
+      const response = await fetch(settings.appsScriptUrl, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          ...recordWithId,
+          targetTab: 'tugas',
+          action: 'create'
+        }),
+      });
+
+      const res = await response.json();
+      if (res && res.status === 'success') {
+        await fetchTugasHarian(settings.appsScriptUrl);
+        setIsSubmittingTugas(false);
+        return true;
+      } else {
+        throw new Error(res.message || 'Gagal menyimpan tugas harian.');
+      }
+    } catch (err) {
+      console.error('Error submitting tugas harian:', err);
+      setIsSubmittingTugas(false);
+      return false;
+    }
+  };
+
+  // Update existing Tugas Harian
+  const handleUpdateTugas = async (updatedTugas: TugasHarian): Promise<boolean> => {
+    setIsSubmittingTugas(true);
+    if (usingDemoData || !settings.appsScriptUrl) {
+      setTugasHarian((prev) => prev.map((t) => t.id === updatedTugas.id ? updatedTugas : t));
+      setIsSubmittingTugas(false);
+      setEditingTugas(null);
+      return true;
+    }
+
+    try {
+      const response = await fetch(settings.appsScriptUrl, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          ...updatedTugas,
+          targetTab: 'tugas',
+          action: 'edit'
+        }),
+      });
+
+      const res = await response.json();
+      if (res && res.status === 'success') {
+        await fetchTugasHarian(settings.appsScriptUrl);
+        setIsSubmittingTugas(false);
+        setEditingTugas(null);
+        return true;
+      } else {
+        throw new Error(res.message || 'Gagal memperbarui tugas harian.');
+      }
+    } catch (err) {
+      console.error('Error updating tugas harian:', err);
+      setIsSubmittingTugas(false);
+      return false;
+    }
+  };
+
+  // Delete Tugas Harian
+  const handleDeleteTugas = async (tugasToDelete: TugasHarian): Promise<boolean> => {
+    if (!currentUser || !currentUser.nama.toLowerCase().includes('ustadz')) {
+      console.error('Unauthorized deletion attempt.');
+      return false;
+    }
+
+    if (usingDemoData || !settings.appsScriptUrl) {
+      setTugasHarian((prev) => prev.filter((t) => t.id !== tugasToDelete.id));
+      if (editingTugas?.id === tugasToDelete.id) {
+        setEditingTugas(null);
+      }
+      return true;
+    }
+
+    try {
+      const response = await fetch(settings.appsScriptUrl, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          id: tugasToDelete.id,
+          targetTab: 'tugas',
+          action: 'delete'
+        }),
+      });
+
+      const res = await response.json();
+      if (res && res.status === 'success') {
+        await fetchTugasHarian(settings.appsScriptUrl);
+        if (editingTugas?.id === tugasToDelete.id) {
+          setEditingTugas(null);
+        }
+        return true;
+      } else {
+        throw new Error(res.message || 'Gagal menghapus tugas harian.');
+      }
+    } catch (err) {
+      console.error('Error deleting tugas harian:', err);
+      return false;
+    }
+  };
+
   // 4. Filter logic
   const filteredSetoran = useMemo(() => {
     return setoran.filter((item) => {
@@ -403,6 +588,35 @@ export default function App() {
       return matchesSearch && matchesGrade && matchesKegiatan && matchesStatus;
     });
   }, [setoran, searchQuery, gradeFilter, kegiatanFilter, statusFilter, currentUser]);
+
+  const filteredTugasHarian = useMemo(() => {
+    return tugasHarian.filter((t) => {
+      const isStudent = currentUser && currentUser.role === 'siswa';
+      
+      // If user is a student, by default we can show tasks for their grade OR "All"
+      // But we also let them filter. Let's see what grade is associated with this student in setoran
+      let studentGrade = '';
+      if (isStudent) {
+        const matchingRecord = setoran.find((s) => isStudentNameMatched(s.nama, currentUser.nama));
+        if (matchingRecord) {
+          studentGrade = matchingRecord.grade;
+        }
+      }
+
+      const matchesSearch = t.materi.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            t.ustadz.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            t.keterangan.toLowerCase().includes(searchQuery.toLowerCase());
+                            
+      let matchesGrade = gradeFilter === 'All' || t.grade === 'All' || t.grade === gradeFilter;
+      
+      // For student view, if grade filter is 'All', they should see tasks for 'All' or their own grade
+      if (isStudent && gradeFilter === 'All' && studentGrade) {
+        matchesGrade = t.grade === 'All' || t.grade === studentGrade;
+      }
+
+      return matchesSearch && matchesGrade;
+    });
+  }, [tugasHarian, searchQuery, gradeFilter, setoran, currentUser]);
 
   // Selected Student Drill-down History
   const studentHistory = useMemo(() => {
@@ -506,7 +720,7 @@ export default function App() {
                 </span>
               </div>
               <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white">
-                Dashboard Penilaian Tahfizh
+                Dashboard Tahfizh Recap 2 INTER 3
               </h1>
               <p className="text-emerald-100 text-xs sm:text-sm font-medium">
                 Sistem rekapitulasi evaluasi setoran hafalan (Tahsin & Ziyadah) terintegrasi langsung dengan Google Sheets.
@@ -545,8 +759,116 @@ export default function App() {
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-5 space-y-6">
 
-        {/* Overview KPI widgets card row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Navigation Tabs Menu */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+          <div className="flex gap-1.5 p-1 bg-slate-50 rounded-xl border border-slate-100 self-start sm:self-auto">
+            <button
+              id="tab-rekap-btn"
+              onClick={() => setActiveTab('rekap')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'rekap'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Rekap Penilaian Tahfizh
+            </button>
+            <button
+              id="tab-tugas-btn"
+              onClick={() => setActiveTab('tugas')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'tugas'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" />
+              Tugas Harian
+              {tugasHarian.length > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'tugas' ? 'bg-white text-emerald-700 font-extrabold' : 'bg-slate-200 text-slate-600 font-extrabold'}`}>
+                  {tugasHarian.length}
+                </span>
+              )}
+            </button>
+          </div>
+          
+          {/* Settings Config Option Trigger */}
+          <button
+            id="btn-toggle-config-guide"
+            onClick={() => setShowConfig(!showConfig)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all self-end sm:self-auto ${
+              showConfig 
+                ? 'bg-slate-800 text-white' 
+                : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <HelpCircle className="w-4 h-4" />
+            Panduan & Spreadsheet Config
+          </button>
+        </div>
+
+        {/* Spreadsheet Config / Guide Panel */}
+        {showConfig && (
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4 animate-in fade-in slide-in-from-top duration-300">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                  Panduan Hubungan Google Sheets
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Ikuti langkah-langkah di bawah ini untuk menghubungkan aplikasi Anda ke spreadsheet real-time.</p>
+              </div>
+              <button
+                onClick={() => setShowConfig(false)}
+                className="text-slate-400 hover:text-rose-600 text-xs font-black p-1 px-2.5 bg-slate-50 hover:bg-rose-50 rounded-lg"
+              >
+                Tutup
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-600 leading-relaxed font-sans">
+              <div className="space-y-3">
+                <h4 className="font-bold text-slate-800">1. Langkah Penyusunan Spreadsheet</h4>
+                <ol className="list-decimal pl-4 space-y-2 font-medium">
+                  <li>Buat spreadsheet baru di Google Sheets.</li>
+                  <li>Beri nama tab pertama <strong className="text-slate-800">Penilaian</strong>, tab kedua <strong className="text-slate-800">Akun</strong>, dan tab ketiga <strong className="text-slate-800">Tugas Harian</strong>.</li>
+                  <li>Masukkan header kolom persis sesuai panduan di file <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-rose-600">src/data.ts</code>.</li>
+                  <li>Klik menu <strong>Ekstensi</strong> di baris atas Google Sheets, lalu pilih <strong>Apps Script</strong>.</li>
+                  <li>Tempel (Paste) seluruh kode Apps Script yang kami sediakan di tab sebelah ke dalam editor, lalu klik simpan.</li>
+                  <li>Klik tombol <strong>Terapkan</strong> (Deploy) &gt; <strong>Penerapan Baru</strong> (New Deployment). Pilih jenis penerapan <strong>Aplikasi Web</strong> (Web App). Konfigurasi: <i>Execute as: Me</i> dan <i>Who has access: Anyone</i>.</li>
+                  <li>Salin URL Aplikasi Web yang dihasilkan ke dalam file <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-rose-600">src/App.tsx</code> sebagai URL default.</li>
+                </ol>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-bold text-slate-800">2. Kode Google Apps Script Backend</h4>
+                <p className="text-slate-500">Salin kode di bawah ini untuk ditaruh di editor Apps Script Google Sheets Anda:</p>
+                <div className="relative">
+                  <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl overflow-x-auto text-[10px] max-h-52 font-mono whitespace-pre select-all">
+                    {GOOGLE_APPS_SCRIPT_CODE}
+                  </pre>
+                  <div className="absolute top-2 right-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
+                        alert("Alhamdulillah, kode Apps Script berhasil disalin ke clipboard!");
+                      }}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] shadow-sm active:scale-95 transition-all"
+                    >
+                      Salin Kode
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'rekap' ? (
+          <>
+            {/* Overview KPI widgets card row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatsCard
             title="Total Setoran"
             value={dashboardStats.totalSetoran}
@@ -858,17 +1180,19 @@ export default function App() {
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                id={`btn-delete-setoran-${item.id}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteRecord(item);
-                                }}
-                                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
-                                title="Hapus Penilaian"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {currentUser.nama.toLowerCase().includes('ustadz') && (
+                                <button
+                                  id={`btn-delete-setoran-${item.id}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDeleteRecord(item);
+                                  }}
+                                  className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                                  title="Hapus Penilaian"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         )}
@@ -913,6 +1237,338 @@ export default function App() {
           </div>
 
         </div>
+        </>
+        ) : (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom duration-300">
+            {/* Header info bar */}
+            <div className="bg-emerald-800 text-white rounded-3xl p-6 shadow-sm border border-emerald-700 relative overflow-hidden">
+              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
+              <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-emerald-300" />
+                    Daftar Tugas & Materi Harian
+                  </h2>
+                  <p className="text-emerald-100 text-xs mt-1 font-medium">
+                    Berisi instruksi, materi ziyadah, murojaah, dan pengumuman harian dari para ustadz.
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-900/40 border border-emerald-700/50 px-4 py-2 rounded-2xl text-center min-w-[90px]">
+                    <span className="block text-2xl font-black">{filteredTugasHarian.length}</span>
+                    <span className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Terfilter</span>
+                  </div>
+                  <div className="bg-emerald-900/40 border border-emerald-700/50 px-4 py-2 rounded-2xl text-center min-w-[90px]">
+                    <span className="block text-2xl font-black">{tugasHarian.length}</span>
+                    <span className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Total</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub content grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Form Column - Only for Ustadz, else Motivation card */}
+              <div className="lg:col-span-1 space-y-6">
+                {currentUser.nama.toLowerCase().includes('ustadz') ? (
+                  <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Plus className="w-4 h-4 text-emerald-600" />
+                        {editingTugas ? 'Edit Tugas Harian' : 'Tambah Tugas Baru'}
+                      </h3>
+                      {editingTugas && (
+                        <button
+                          onClick={() => {
+                            setEditingTugas(null);
+                            setTugasFormMateri('');
+                            setTugasFormUstadz('');
+                            setTugasFormKeterangan('');
+                          }}
+                          className="text-xs font-bold text-rose-500 hover:underline"
+                        >
+                          Batal Edit
+                        </button>
+                      )}
+                    </div>
+
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!tugasFormMateri.trim()) return;
+                        
+                        const ustadzName = tugasFormUstadz.trim() || currentUser.nama;
+                        
+                        const payload = {
+                          tanggal: tugasFormTanggal,
+                          grade: tugasFormGrade,
+                          materi: tugasFormMateri.trim(),
+                          ustadz: ustadzName,
+                          keterangan: tugasFormKeterangan.trim(),
+                        };
+
+                        let success = false;
+                        if (editingTugas) {
+                          success = await handleUpdateTugas({
+                            ...editingTugas,
+                            ...payload,
+                          });
+                        } else {
+                          success = await handleAddTugas(payload);
+                        }
+
+                        if (success) {
+                          // Reset form
+                          setTugasFormMateri('');
+                          setTugasFormKeterangan('');
+                        }
+                      }}
+                      className="space-y-4 text-xs font-sans"
+                    >
+                      {/* Tanggal */}
+                      <div className="space-y-1">
+                        <label className="block text-slate-500 font-bold">Tanggal Tugas</label>
+                        <input
+                          type="date"
+                          required
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-medium"
+                          value={tugasFormTanggal}
+                          onChange={(e) => setTugasFormTanggal(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Grade/Kelas */}
+                      <div className="space-y-1">
+                        <label className="block text-slate-500 font-bold">Untuk Kelas / Grade</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold appearance-none bg-white"
+                          value={tugasFormGrade}
+                          onChange={(e) => setTugasFormGrade(e.target.value)}
+                        >
+                          <option value="All">Semua Kelas (All)</option>
+                          <option value="2 Inter 1">2 Inter 1</option>
+                          <option value="2 Inter 2">2 Inter 2</option>
+                          <option value="2 Inter 3">2 Inter 3</option>
+                          <option value="1 Inter 1">1 Inter 1</option>
+                          <option value="1 Inter 2">1 Inter 2</option>
+                          <option value="3 Inter 1">3 Inter 1</option>
+                          <option value="3 Inter 2">3 Inter 2</option>
+                        </select>
+                      </div>
+
+                      {/* Materi */}
+                      <div className="space-y-1">
+                        <label className="block text-slate-500 font-bold">Materi / Tugas Utama</label>
+                        <textarea
+                          rows={3}
+                          required
+                          placeholder="Contoh: Ziyadah Al-Ghashiyah baris 1-10"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold"
+                          value={tugasFormMateri}
+                          onChange={(e) => setTugasFormMateri(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Ustadz */}
+                      <div className="space-y-1">
+                        <label className="block text-slate-500 font-bold">Ustadz / Guru Pemberi</label>
+                        <input
+                          type="text"
+                          placeholder={currentUser.nama}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-medium"
+                          value={tugasFormUstadz}
+                          onChange={(e) => setTugasFormUstadz(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Keterangan */}
+                      <div className="space-y-1">
+                        <label className="block text-slate-500 font-bold">Keterangan / Catatan Tambahan</label>
+                        <textarea
+                          rows={3}
+                          placeholder="Catatan tambahan bagi siswa..."
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700"
+                          value={tugasFormKeterangan}
+                          onChange={(e) => setTugasFormKeterangan(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Submit button */}
+                      <button
+                        type="submit"
+                        disabled={isSubmittingTugas}
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 text-xs"
+                      >
+                        {isSubmittingTugas ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Menyimpan...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            {editingTugas ? 'Simpan Perubahan' : 'Publish Tugas'}
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  // Student View Motivation & Instructions
+                  <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-6">
+                    <div className="border-b border-slate-100 pb-4 text-center">
+                      <div className="inline-flex bg-emerald-50 text-emerald-800 p-4 rounded-full mb-2 border-4 border-emerald-100">
+                        <ClipboardList className="w-8 h-8 text-emerald-600" />
+                      </div>
+                      <h3 className="text-base font-extrabold text-slate-800">Tugas Harian Anda</h3>
+                      <p className="text-xs text-slate-400 mt-1">Harap perhatikan & hafalkan materi harian di samping</p>
+                    </div>
+
+                    <div className="space-y-4 text-xs text-slate-600 leading-relaxed font-sans font-medium">
+                      <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl space-y-2 text-emerald-800">
+                        <h4 className="font-bold text-emerald-900 flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Tips Ziyadah Efektif:
+                        </h4>
+                        <ul className="list-disc pl-4 space-y-1.5 font-semibold">
+                          <li>Membaca ayat baru secara berulang 15-20 kali dari mushaf sebelum menghafalkannya.</li>
+                          <li>Sambungkan satu ayat dengan ayat berikutnya agar ingatan mengalir lancar.</li>
+                          <li>Mintalah bimbingan mandiri (talaqqi) dari teman sebaya sebelum menyetorkan ke Ustadz.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Tasks List Column */}
+              <div className="lg:col-span-2 space-y-4">
+                {/* Search & Filters for Tasks */}
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="relative w-full sm:max-w-xs">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      <Search className="w-3.5 h-3.5" />
+                    </span>
+                    <input
+                      type="text"
+                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700"
+                      placeholder="Cari materi / ustadz..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-40">
+                      <select
+                        className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 appearance-none cursor-pointer"
+                        value={gradeFilter}
+                        onChange={(e) => setGradeFilter(e.target.value)}
+                      >
+                        <option value="All">Semua Grade/Kelas</option>
+                        <option value="2 Inter 1">2 Inter 1</option>
+                        <option value="2 Inter 2">2 Inter 2</option>
+                        <option value="2 Inter 3">2 Inter 3</option>
+                        <option value="1 Inter 1">1 Inter 1</option>
+                        <option value="1 Inter 2">1 Inter 2</option>
+                        <option value="3 Inter 1">3 Inter 1</option>
+                        <option value="3 Inter 2">3 Inter 2</option>
+                      </select>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <Filter className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tasks loop */}
+                <div className="space-y-4">
+                  {filteredTugasHarian.length === 0 ? (
+                    <div className="bg-white rounded-3xl p-12 text-center text-slate-400 border border-slate-200 shadow-xs">
+                      <ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="italic font-bold text-xs">Tidak ada tugas harian yang terbit saat ini.</p>
+                      <p className="text-[11px] text-slate-400 mt-1">Coba sesuaikan pilihan filter pencarian atau hubungi Ustadz Anda.</p>
+                    </div>
+                  ) : (
+                    filteredTugasHarian.map((t) => (
+                      <div
+                        key={t.id}
+                        className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 hover:border-emerald-300 transition-all space-y-4 relative group"
+                      >
+                        {/* Task Card Header */}
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                {t.grade === 'All' ? 'Semua Kelas' : `Kelas: ${t.grade}`}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold font-mono flex items-center gap-1">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                {new Date(t.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              </span>
+                            </div>
+                            <h3 className="text-sm font-black text-slate-800 leading-snug pt-1.5">
+                              {t.materi}
+                            </h3>
+                          </div>
+
+                          {/* Ustadz Controls */}
+                          {currentUser.role === 'ustadz' && (
+                            <div className="flex items-center gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => {
+                                  setEditingTugas(t);
+                                  setTugasFormTanggal(t.tanggal);
+                                  setTugasFormGrade(t.grade);
+                                  setTugasFormMateri(t.materi);
+                                  setTugasFormUstadz(t.ustadz);
+                                  setTugasFormKeterangan(t.keterangan);
+                                  const formEl = document.getElementById('tugas-form-container');
+                                  if (formEl) {
+                                    formEl.scrollIntoView({ behavior: 'smooth' });
+                                  }
+                                }}
+                                className="p-1.5 hover:bg-amber-50 text-slate-400 hover:text-amber-600 rounded-lg transition-colors border border-transparent hover:border-amber-200"
+                                title="Edit Tugas"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              {currentUser.nama.toLowerCase().includes('ustadz') && (
+                                <button
+                                  onClick={() => setConfirmDeleteTugas(t)}
+                                  className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                                  title="Hapus Tugas"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Description block */}
+                        {t.keterangan && (
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600 leading-relaxed font-sans font-semibold whitespace-pre-wrap">
+                            {t.keterangan}
+                          </div>
+                        )}
+
+                        {/* Footer details */}
+                        <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                          <span>Pemberi Tugas: <strong className="text-slate-600 font-extrabold">{t.ustadz || 'Ustadz'}</strong></span>
+                          <span className="font-mono text-[9px]">ID: {t.id}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
 
       </main>
 
@@ -970,6 +1626,55 @@ export default function App() {
                 ) : (
                   'Ya, Hapus Data'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Tugas Harian Confirmation Modal */}
+      {confirmDeleteTugas && (
+        <div id="modal-delete-tugas-confirmation" className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 transition-all duration-300">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-3 bg-rose-50 rounded-2xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Hapus Tugas Harian</h3>
+                <p className="text-xs text-slate-500 font-medium">Tindakan ini tidak dapat dibatalkan</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs text-slate-600 font-sans">
+              <div className="flex justify-between"><span className="font-semibold text-slate-400">Kelas:</span> <span className="font-bold text-slate-800">{confirmDeleteTugas.grade}</span></div>
+              <div className="flex justify-between"><span className="font-semibold text-slate-400">Materi:</span> <span className="font-bold text-slate-800 truncate max-w-[200px]">{confirmDeleteTugas.materi}</span></div>
+              <div className="flex justify-between"><span className="font-semibold text-slate-400">Tanggal:</span> <span className="font-bold text-slate-800">{new Date(confirmDeleteTugas.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed font-sans">
+              Apakah Anda yakin ingin menghapus tugas harian ini? Jika terhubung dengan Google Sheets, baris data ini juga akan terhapus dari sheet "Tugas Harian".
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                id="btn-confirm-delete-tugas-cancel"
+                onClick={() => setConfirmDeleteTugas(null)}
+                className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-colors text-xs font-sans"
+              >
+                Batal
+              </button>
+              <button
+                id="btn-confirm-delete-tugas-submit"
+                onClick={async () => {
+                  const success = await handleDeleteTugas(confirmDeleteTugas);
+                  if (success) {
+                    setConfirmDeleteTugas(null);
+                  }
+                }}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-sm transition-colors text-xs flex items-center justify-center gap-1.5 font-sans"
+              >
+                Ya, Hapus Tugas
               </button>
             </div>
           </div>
