@@ -9,17 +9,17 @@ interface StatsChartsProps {
 export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
   // 1. Calculate Kegiatan (Tahsin, Ziyadah, Murojaah)
   const total = data.length;
-  const tahsinCount = data.filter((x) => x.kegiatan.toLowerCase().includes('tahsin')).length;
-  const ziyadahCount = data.filter((x) => x.kegiatan.toLowerCase().includes('ziyadah')).length;
-  const murojaahCount = data.filter((x) => x.kegiatan.toLowerCase().includes('murojaah')).length;
+  const tahsinCount = data.filter((x) => (x.kegiatan || '').toLowerCase().includes('tahsin')).length;
+  const ziyadahCount = data.filter((x) => (x.kegiatan || '').toLowerCase().includes('ziyadah')).length;
+  const murojaahCount = data.filter((x) => (x.kegiatan || '').toLowerCase().includes('murojaah')).length;
 
   const tahsinPct = total > 0 ? Math.round((tahsinCount / total) * 100) : 0;
   const ziyadahPct = total > 0 ? Math.round((ziyadahCount / total) * 100) : 0;
   const murojaahPct = total > 0 ? Math.round((murojaahCount / total) * 100) : 0;
 
   // 2. Calculate Status (Boleh Lanjut vs Ulangi)
-  const lanjutCount = data.filter((x) => x.status.toLowerCase().includes('lanjut')).length;
-  const ulangiCount = data.filter((x) => x.status.toLowerCase().includes('ulangi')).length;
+  const lanjutCount = data.filter((x) => (x.status || '').toLowerCase().includes('lanjut')).length;
+  const ulangiCount = data.filter((x) => (x.status || '').toLowerCase().includes('ulangi')).length;
 
   const lanjutPct = total > 0 ? Math.round((lanjutCount / total) * 100) : 0;
   const ulangiPct = total > 0 ? Math.round((ulangiCount / total) * 100) : 0;

@@ -75,6 +75,101 @@ const isStudentNameMatched = (setoranName: string, studentProfileName: string): 
   return sWords.some(w => pWords.includes(w));
 };
 
+// Helper to parse the multi-column (split) task materi field
+export const parseMateriField = (materi: string) => {
+  try {
+    const trimmed = (materi || '').trim();
+    if (trimmed && (trimmed.startsWith('{') || trimmed.startsWith('{"'))) {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        const ziyadah = (parsed.ziyadah || '').trim();
+        const murojaah = (parsed.murojaah || '').trim();
+        const tugasMateri = (parsed.tugasMateri || parsed.materi || '').trim();
+        
+        // Only treat as rich JSON if at least one field is non-empty
+        if (ziyadah || murojaah || tugasMateri) {
+          return {
+            ziyadah,
+            murojaah,
+            tugasMateri,
+            isJson: true,
+          };
+        }
+      }
+    }
+  } catch (e) {
+    // Fallback to plain text
+  }
+  return {
+    ziyadah: '',
+    murojaah: '',
+    tugasMateri: materi || '',
+    isJson: false,
+  };
+};
+
+// Robust date formatting to handle different date string styles returned by Sheets
+export const formatDateSafe = (dateStr: any): string => {
+  if (!dateStr) return '';
+  const str = String(dateStr).trim();
+  
+  // Try to parse using standard Date first (e.g. if it is "YYYY-MM-DD" or standard ISO)
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  // Handle "DD/MM/YYYY" or "DD-MM-YYYY" or "DD.MM.YYYY"
+  const parts = str.split(/[-/.]/);
+  if (parts.length === 3) {
+    const p0 = parseInt(parts[0], 10);
+    const p1 = parseInt(parts[1], 10);
+    const p2 = parseInt(parts[2], 10);
+    
+    // Check if the third part is a year (e.g., 4 digits) and first part is a day
+    if (p0 <= 31 && p1 <= 12 && p2 > 1000) {
+      const d2 = new Date(p2, p1 - 1, p0);
+      if (!isNaN(d2.getTime())) {
+        return d2.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      }
+    }
+    // Check if first part is a year (e.g. YYYY/MM/DD)
+    if (p0 > 1000 && p1 <= 12 && p2 <= 31) {
+      const d2 = new Date(p0, p1 - 1, p2);
+      if (!isNaN(d2.getTime())) {
+        return d2.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      }
+    }
+  }
+
+  // Fallback to raw string if parsing fails
+  return str;
+};
+
+// Robust date parsing to milliseconds for sorting
+export const parseDateToTime = (dateStr: any): number => {
+  if (!dateStr) return 0;
+  const str = String(dateStr).trim();
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d.getTime();
+  
+  const parts = str.split(/[-/.]/);
+  if (parts.length === 3) {
+    const p0 = parseInt(parts[0], 10);
+    const p1 = parseInt(parts[1], 10);
+    const p2 = parseInt(parts[2], 10);
+    if (p0 <= 31 && p1 <= 12 && p2 > 1000) {
+      const d2 = new Date(p2, p1 - 1, p0);
+      if (!isNaN(d2.getTime())) return d2.getTime();
+    }
+    if (p0 > 1000 && p1 <= 12 && p2 <= 31) {
+      const d2 = new Date(p0, p1 - 1, p2);
+      if (!isNaN(d2.getTime())) return d2.getTime();
+    }
+  }
+  return 0;
+};
+
 
 export default function App() {
   // 1. Core States
@@ -92,7 +187,11 @@ export default function App() {
     return new Date().toISOString().substring(0, 10);
   });
   const [tugasFormGrade, setTugasFormGrade] = useState<string>('All');
+  const [tugasFormSiswa, setTugasFormSiswa] = useState<string>('All');
   const [tugasFormMateri, setTugasFormMateri] = useState<string>('');
+  const [tugasFormZiyadah, setTugasFormZiyadah] = useState<string>('');
+  const [tugasFormMurojaah, setTugasFormMurojaah] = useState<string>('');
+  const [tugasFormTugasMateri, setTugasFormTugasMateri] = useState<string>('');
   const [tugasFormUstadz, setTugasFormUstadz] = useState<string>('');
   const [tugasFormKeterangan, setTugasFormKeterangan] = useState<string>('');
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
@@ -187,9 +286,9 @@ export default function App() {
       if (response.ok) {
         const res = await response.json();
         if (res && res.status === 'success' && Array.isArray(res.data)) {
-          // Sort tasks descending by date
+          // Sort tasks descending by date safely
           const sortedTasks = res.data.sort((a: TugasHarian, b: TugasHarian) => {
-            return new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime();
+            return parseDateToTime(b.tanggal) - parseDateToTime(a.tanggal);
           });
           setTugasHarian(sortedTasks);
         }
@@ -390,7 +489,7 @@ export default function App() {
 
   // Delete assessment
   const handleDeleteSetoran = async (recordToDelete: Setoran): Promise<boolean> => {
-    if (!currentUser || !currentUser.nama.toLowerCase().includes('ustadz')) {
+    if (!currentUser || !(currentUser.nama || '').toLowerCase().includes('ustadz')) {
       console.error('Unauthorized deletion attempt.');
       return false;
     }
@@ -524,7 +623,7 @@ export default function App() {
 
   // Delete Tugas Harian
   const handleDeleteTugas = async (tugasToDelete: TugasHarian): Promise<boolean> => {
-    if (!currentUser || !currentUser.nama.toLowerCase().includes('ustadz')) {
+    if (!currentUser || !(currentUser.nama || '').toLowerCase().includes('ustadz')) {
       console.error('Unauthorized deletion attempt.');
       return false;
     }
@@ -576,12 +675,12 @@ export default function App() {
         return false;
       }
 
-      const matchesSearch = item.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            item.id.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = (item.nama || '').toLowerCase().includes((searchQuery || '').toLowerCase()) || 
+                            (item.id || '').toLowerCase().includes((searchQuery || '').toLowerCase());
       const matchesGrade = gradeFilter === 'All' || item.grade === gradeFilter;
       const matchesKegiatan = kegiatanFilter === 'All' || 
                               (kegiatanFilter === 'Tahsin'
-                                ? item.kegiatan === 'Tahsin' || item.kegiatan.toLowerCase().includes('tahsin (')
+                                ? item.kegiatan === 'Tahsin' || (item.kegiatan || '').toLowerCase().includes('tahsin (')
                                 : item.kegiatan === kegiatanFilter);
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       
@@ -603,15 +702,26 @@ export default function App() {
         }
       }
 
-      const matchesSearch = t.materi.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            t.ustadz.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            t.keterangan.toLowerCase().includes(searchQuery.toLowerCase());
-                            
+      const matchesSearch = (t.materi || '').toLowerCase().includes((searchQuery || '').toLowerCase()) || 
+                            (t.ustadz || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+                            (t.keterangan || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+                            (t.siswa || '').toLowerCase().includes((searchQuery || '').toLowerCase());
+                             
       let matchesGrade = gradeFilter === 'All' || t.grade === 'All' || t.grade === gradeFilter;
       
       // For student view, if grade filter is 'All', they should see tasks for 'All' or their own grade
       if (isStudent && gradeFilter === 'All' && studentGrade) {
         matchesGrade = t.grade === 'All' || t.grade === studentGrade;
+      }
+
+      // If the task is specific to a single student
+      if (t.siswa && t.siswa !== 'All') {
+        if (isStudent) {
+          return matchesSearch && isStudentNameMatched(t.siswa, currentUser.nama);
+        } else {
+          // For teachers, display specific student tasks along with the grade
+          return matchesSearch && matchesGrade;
+        }
       }
 
       return matchesSearch && matchesGrade;
@@ -622,7 +732,7 @@ export default function App() {
   const studentHistory = useMemo(() => {
     if (!selectedStudentName) return [];
     return setoran
-      .filter((s) => s.nama.toLowerCase() === selectedStudentName.toLowerCase())
+      .filter((s) => (s.nama || '').toLowerCase() === (selectedStudentName || '').toLowerCase())
       .sort((a, b) => new Date(b.tanggalSetoran).getTime() - new Date(a.tanggalSetoran).getTime());
   }, [selectedStudentName, setoran]);
 
@@ -630,15 +740,15 @@ export default function App() {
   const activeStudentsList = useMemo(() => {
     const map: { [key: string]: { id: string; nama: string; grade: string } } = {};
     setoran.forEach((s) => {
-      if (s.nama && !map[s.nama.toLowerCase()]) {
-        map[s.nama.toLowerCase()] = {
-          id: s.id,
+      if (s.nama && !map[(s.nama || '').toLowerCase()]) {
+        map[(s.nama || '').toLowerCase()] = {
+          id: s.id || '',
           nama: s.nama,
-          grade: s.grade,
+          grade: s.grade || '',
         };
       }
     });
-    return Object.values(map).sort((a, b) => a.nama.localeCompare(b.nama));
+    return Object.values(map).sort((a, b) => (a.nama || '').localeCompare(b.nama || ''));
   }, [setoran]);
 
   // Stats Calculations for Dashboard overview widgets
@@ -646,7 +756,7 @@ export default function App() {
     const totalSetoran = filteredSetoran.length;
     
     // Distinct students
-    const uniqueStudents = new Set(filteredSetoran.map((s) => s.nama.toLowerCase()));
+    const uniqueStudents = new Set(filteredSetoran.map((s) => (s.nama || '').toLowerCase()));
     const totalSiswa = uniqueStudents.size;
 
     // Avg lines disetor
@@ -654,7 +764,7 @@ export default function App() {
     const avgBaris = totalSetoran > 0 ? Math.round((totalLines / totalSetoran) * 10) / 10 : 0;
 
     // Persentase "Boleh Lanjut"
-    const totalLancar = filteredSetoran.filter((s) => s.status.toLowerCase().includes('lanjut')).length;
+    const totalLancar = filteredSetoran.filter((s) => (s.status || '').toLowerCase().includes('lanjut')).length;
     const lancarRate = totalSetoran > 0 ? Math.round((totalLancar / totalSetoran) * 100) : 0;
 
     return {
@@ -1180,7 +1290,7 @@ export default function App() {
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              {currentUser.nama.toLowerCase().includes('ustadz') && (
+                              {currentUser?.nama?.toLowerCase().includes('ustadz') && (
                                 <button
                                   id={`btn-delete-setoran-${item.id}`}
                                   onClick={(e) => {
@@ -1272,7 +1382,7 @@ export default function App() {
               
               {/* Form Column - Only for Ustadz, else Motivation card */}
               <div className="lg:col-span-1 space-y-6">
-                {currentUser.nama.toLowerCase().includes('ustadz') ? (
+                {currentUser?.nama?.toLowerCase().includes('ustadz') ? (
                   <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                       <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -1284,8 +1394,12 @@ export default function App() {
                           onClick={() => {
                             setEditingTugas(null);
                             setTugasFormMateri('');
+                            setTugasFormZiyadah('');
+                            setTugasFormMurojaah('');
+                            setTugasFormTugasMateri('');
                             setTugasFormUstadz('');
                             setTugasFormKeterangan('');
+                            setTugasFormSiswa('All');
                           }}
                           className="text-xs font-bold text-rose-500 hover:underline"
                         >
@@ -1297,14 +1411,24 @@ export default function App() {
                     <form
                       onSubmit={async (e) => {
                         e.preventDefault();
-                        if (!tugasFormMateri.trim()) return;
+                        const isAnyMateriFilled = tugasFormZiyadah.trim() || tugasFormMurojaah.trim() || tugasFormTugasMateri.trim();
+                        if (!isAnyMateriFilled) {
+                          alert('Harap isi minimal salah satu tugas (Ziyadah, Murojaah, atau Materi)!');
+                          return;
+                        }
                         
                         const ustadzName = tugasFormUstadz.trim() || currentUser.nama;
+                        const combinedMateri = JSON.stringify({
+                          ziyadah: tugasFormZiyadah.trim(),
+                          murojaah: tugasFormMurojaah.trim(),
+                          tugasMateri: tugasFormTugasMateri.trim()
+                        });
                         
                         const payload = {
                           tanggal: tugasFormTanggal,
                           grade: tugasFormGrade,
-                          materi: tugasFormMateri.trim(),
+                          siswa: tugasFormSiswa,
+                          materi: combinedMateri,
                           ustadz: ustadzName,
                           keterangan: tugasFormKeterangan.trim(),
                         };
@@ -1322,7 +1446,11 @@ export default function App() {
                         if (success) {
                           // Reset form
                           setTugasFormMateri('');
+                          setTugasFormZiyadah('');
+                          setTugasFormMurojaah('');
+                          setTugasFormTugasMateri('');
                           setTugasFormKeterangan('');
+                          setTugasFormSiswa('All');
                         }
                       }}
                       className="space-y-4 text-xs font-sans"
@@ -1358,16 +1486,77 @@ export default function App() {
                         </select>
                       </div>
 
-                      {/* Materi */}
+                      {/* Siswa Spesifik (Opsional) */}
                       <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold">Materi / Tugas Utama</label>
+                        <label className="block text-slate-500 font-bold flex items-center justify-between">
+                          <span>Untuk Siswa Spesifik (Opsional)</span>
+                          <span className="text-[10px] text-emerald-600 font-black">Dari Spreadsheet</span>
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold appearance-none bg-white"
+                          value={tugasFormSiswa}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTugasFormSiswa(val);
+                            if (val && val !== 'All') {
+                              const foundStudent = activeStudentsList.find(s => s.nama === val);
+                              if (foundStudent && foundStudent.grade) {
+                                setTugasFormGrade(foundStudent.grade);
+                              }
+                            }
+                          }}
+                        >
+                          <option value="All">Semua Siswa (All)</option>
+                          {activeStudentsList.map((st, idx) => (
+                            <option key={`student-opt-${st.nama}-${idx}`} value={st.nama}>
+                              {st.nama} {st.grade ? `(${st.grade})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Tugas Ziyadah */}
+                      <div className="space-y-1">
+                        <label className="block text-slate-500 font-bold flex items-center justify-between">
+                          <span>Tugas Ziyadah</span>
+                          <span className="text-[10px] text-emerald-600 font-black">Ziyadah</span>
+                        </label>
                         <textarea
-                          rows={3}
-                          required
-                          placeholder="Contoh: Ziyadah Al-Ghashiyah baris 1-10"
+                          rows={2}
+                          placeholder="Contoh: Juz 30 An-Naba' 1-15"
                           className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold"
-                          value={tugasFormMateri}
-                          onChange={(e) => setTugasFormMateri(e.target.value)}
+                          value={tugasFormZiyadah}
+                          onChange={(e) => setTugasFormZiyadah(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Tugas Murojaah */}
+                      <div className="space-y-1">
+                        <label className="block text-slate-500 font-bold flex items-center justify-between">
+                          <span>Tugas Murojaah</span>
+                          <span className="text-[10px] text-blue-600 font-black">Murojaah</span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Contoh: Al-Mulk s/d Al-Qolam"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold"
+                          value={tugasFormMurojaah}
+                          onChange={(e) => setTugasFormMurojaah(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Tugas Materi */}
+                      <div className="space-y-1">
+                        <label className="block text-slate-500 font-bold flex items-center justify-between">
+                          <span>Tugas Materi</span>
+                          <span className="text-[10px] text-indigo-600 font-black font-semibold">Teori / Hafalan Baru</span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder="Contoh: Pelajari hukum tajwid nun sukun & tanwin"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold"
+                          value={tugasFormTugasMateri}
+                          onChange={(e) => setTugasFormTugasMateri(e.target.value)}
                         />
                       </div>
 
@@ -1492,9 +1681,9 @@ export default function App() {
                       <p className="text-[11px] text-slate-400 mt-1">Coba sesuaikan pilihan filter pencarian atau hubungi Ustadz Anda.</p>
                     </div>
                   ) : (
-                    filteredTugasHarian.map((t) => (
+                    filteredTugasHarian.map((t, idx) => (
                       <div
-                        key={t.id}
+                        key={`tugas-${t.id || ''}-${idx}`}
                         className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 hover:border-emerald-300 transition-all space-y-4 relative group"
                       >
                         {/* Task Card Header */}
@@ -1504,27 +1693,74 @@ export default function App() {
                               <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
                                 {t.grade === 'All' ? 'Semua Kelas' : `Kelas: ${t.grade}`}
                               </span>
+                              {t.siswa && t.siswa !== 'All' && (
+                                <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                  Khusus Siswa: {t.siswa}
+                                </span>
+                              )}
                               <span className="text-[10px] text-slate-400 font-bold font-mono flex items-center gap-1">
                                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                {new Date(t.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                {formatDateSafe(t.tanggal)}
                               </span>
                             </div>
-                            <h3 className="text-sm font-black text-slate-800 leading-snug pt-1.5">
-                              {t.materi}
-                            </h3>
+                            {(() => {
+                              const parsed = parseMateriField(t.materi);
+                              if (parsed.isJson) {
+                                return (
+                                  <div className="space-y-2.5 pt-2 border-t border-slate-100/50 mt-1">
+                                    {parsed.ziyadah && (
+                                      <div className="flex items-start gap-2">
+                                        <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider shrink-0 mt-0.5 border border-emerald-100">
+                                          Ziyadah
+                                        </span>
+                                        <span className="text-xs text-slate-700 font-bold">{parsed.ziyadah}</span>
+                                      </div>
+                                    )}
+                                    {parsed.murojaah && (
+                                      <div className="flex items-start gap-2">
+                                        <span className="bg-blue-50 text-blue-700 text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider shrink-0 mt-0.5 border border-blue-100">
+                                          Murojaah
+                                        </span>
+                                        <span className="text-xs text-slate-700 font-bold">{parsed.murojaah}</span>
+                                      </div>
+                                    )}
+                                    {parsed.tugasMateri && (
+                                      <div className="flex items-start gap-2">
+                                        <span className="bg-indigo-50 text-indigo-700 text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider shrink-0 mt-0.5 border border-indigo-100">
+                                          Materi
+                                        </span>
+                                        <span className="text-xs text-slate-700 font-bold">{parsed.tugasMateri}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <h3 className="text-sm font-black text-slate-800 leading-snug pt-1.5">
+                                  {t.materi}
+                                </h3>
+                              );
+                            })()}
                           </div>
-
+ 
                           {/* Ustadz Controls */}
                           {currentUser.role === 'ustadz' && (
                             <div className="flex items-center gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => {
                                   setEditingTugas(t);
-                                  setTugasFormTanggal(t.tanggal);
-                                  setTugasFormGrade(t.grade);
-                                  setTugasFormMateri(t.materi);
-                                  setTugasFormUstadz(t.ustadz);
-                                  setTugasFormKeterangan(t.keterangan);
+                                  setTugasFormTanggal(t.tanggal || '');
+                                  setTugasFormGrade(t.grade || 'All');
+                                  setTugasFormSiswa(t.siswa || 'All');
+                                  
+                                  const parsed = parseMateriField(t.materi);
+                                  setTugasFormZiyadah(parsed.ziyadah || '');
+                                  setTugasFormMurojaah(parsed.murojaah || '');
+                                  setTugasFormTugasMateri(parsed.tugasMateri || '');
+                                  setTugasFormMateri(t.materi || '');
+                                  
+                                  setTugasFormUstadz(t.ustadz || '');
+                                  setTugasFormKeterangan(t.keterangan || '');
                                   const formEl = document.getElementById('tugas-form-container');
                                   if (formEl) {
                                     formEl.scrollIntoView({ behavior: 'smooth' });
@@ -1535,7 +1771,7 @@ export default function App() {
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              {currentUser.nama.toLowerCase().includes('ustadz') && (
+                              {currentUser?.nama?.toLowerCase().includes('ustadz') && (
                                 <button
                                   onClick={() => setConfirmDeleteTugas(t)}
                                   className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"

@@ -82,12 +82,12 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
 
       // Find account
       const matchedAccount = accounts.find(
-        (acc) => acc.id.toLowerCase() === enteredId && acc.password === enteredPass
+        (acc) => (acc.id || '').toLowerCase() === enteredId && acc.password === enteredPass
       );
 
       // Fallback matching to DEMO_AKUN if live didn't find and we are in online mode but user wanted to login with demo
       const account = matchedAccount || DEMO_AKUN.find(
-        (acc) => acc.id.toLowerCase() === enteredId && acc.password === enteredPass
+        (acc) => (acc.id || '').toLowerCase() === enteredId && acc.password === enteredPass
       );
 
       if (account) {

@@ -42,5 +42,6 @@ export interface TugasHarian {
   materi: string;  // e.g. "Murojaah Juz 30"
   ustadz: string;  // Name of assigner
   keterangan: string; // Additional instructions
+  siswa?: string;  // e.g. "Siswa A" or "All"
 }
 

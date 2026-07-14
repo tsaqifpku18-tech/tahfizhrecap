@@ -56,17 +56,17 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
   // Auto fill when editing a record
   useEffect(() => {
     if (editingRecord) {
-      setId(editingRecord.id);
-      setNama(editingRecord.nama);
-      setGrade(editingRecord.grade);
-      setTanggalSetoran(editingRecord.tanggalSetoran);
-      setKegiatan(editingRecord.kegiatan);
+      setId(editingRecord.id || '');
+      setNama(editingRecord.nama || '');
+      setGrade(editingRecord.grade || '');
+      setTanggalSetoran(editingRecord.tanggalSetoran || '');
+      setKegiatan(editingRecord.kegiatan || '');
       setSurah(editingRecord.surah || '');
-      setBaris(editingRecord.baris);
-      setCtt(editingRecord.ctt);
-      setStatus(editingRecord.status as 'Boleh Lanjut' | 'Ulangi');
+      setBaris(editingRecord.baris !== undefined ? editingRecord.baris : 3);
+      setCtt(editingRecord.ctt || '');
+      setStatus((editingRecord.status || 'Boleh Lanjut') as 'Boleh Lanjut' | 'Ulangi');
       setIsNewStudent(false);
-      setSelectedStudentId(editingRecord.id);
+      setSelectedStudentId(editingRecord.id || '');
     } else {
       setSelectedStudentId('');
       setIsNewStudent(false);
@@ -80,24 +80,6 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
     }
   }, [editingRecord]);
 
-  // Auto fill when choosing an existing student
-  useEffect(() => {
-    if (editingRecord) return; // Skip during editing mode
-    if (!isNewStudent && selectedStudentId) {
-      const student = activeStudents.find((s) => s.id === selectedStudentId);
-      if (student) {
-        setId(student.id);
-        setNama(student.nama);
-        setGrade(student.grade);
-      }
-    } else if (isNewStudent) {
-      // Auto generate ID for new student
-      const randomId = String(Math.floor(1000000 + Math.random() * 9000000));
-      setId(randomId);
-      setNama('');
-      setGrade('');
-    }
-  }, [selectedStudentId, isNewStudent, activeStudents, editingRecord]);
 
   // Adjust Status based on Catatan selection
   const handleCttSelect = (val: string) => {
@@ -200,7 +182,13 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${
               !isNewStudent ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
             }`}
-            onClick={() => setIsNewStudent(false)}
+            onClick={() => {
+              setIsNewStudent(false);
+              setSelectedStudentId('');
+              setId('');
+              setNama('');
+              setGrade('');
+            }}
           >
             Siswa Terdaftar
           </button>
@@ -210,7 +198,14 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${
               isNewStudent ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
             }`}
-            onClick={() => setIsNewStudent(true)}
+            onClick={() => {
+              setIsNewStudent(true);
+              setSelectedStudentId('');
+              const randomId = String(Math.floor(1000000 + Math.random() * 9000000));
+              setId(randomId);
+              setNama('');
+              setGrade('');
+            }}
           >
             Siswa Baru (+)
           </button>
@@ -226,11 +221,26 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               id="select-registered-student"
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedStudentId(val);
+                if (val) {
+                  const student = activeStudents.find((s) => s.id === val);
+                  if (student) {
+                    setId(student.id);
+                    setNama(student.nama);
+                    setGrade(student.grade);
+                  }
+                } else {
+                  setId('');
+                  setNama('');
+                  setGrade('');
+                }
+              }}
             >
               <option value="">-- Pilih Nama Siswa --</option>
-              {activeStudents.map((student) => (
-                <option key={student.id} value={student.id}>
+              {activeStudents.map((student, idx) => (
+                <option key={`student-form-opt-${student.nama}-${idx}`} value={student.id}>
                   {student.nama} ({student.grade})
                 </option>
               ))}

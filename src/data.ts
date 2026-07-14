@@ -281,29 +281,60 @@ function doGet(e) {
     }
     
     var headers = data[0];
-    var idIdx = 0;
-    var tanggalIdx = 1;
-    var gradeIdx = 2;
-    var materiIdx = 3;
-    var ustadzIdx = 4;
-    var ketIdx = 5;
+    var idIdx = -1;
+    var tanggalIdx = -1;
+    var gradeIdx = -1;
+    var ustadzIdx = -1;
+    var ketIdx = -1;
+    var siswaIdx = -1;
+    
+    // New split columns
+    var tugasZiyadahIdx = -1;
+    var tugasMurojaahIdx = -1;
+    var tugasMateriIdx = -1;
+    var legacyMateriIdx = -1;
     
     for (var h = 0; h < headers.length; h++) {
       var headerStr = String(headers[h]).toLowerCase().trim();
       if (headerStr === "id") idIdx = h;
-      else if (headerStr === "tanggal" || headerStr === "tgl") tanggalIdx = h;
-      else if (headerStr === "grade" || headerStr === "kelas") gradeIdx = h;
-      else if (headerStr === "materi" || headerStr === "tugas") materiIdx = h;
-      else if (headerStr === "ustadz" || headerStr === "guru" || headerStr === "pembuat") ustadzIdx = h;
-      else if (headerStr === "keterangan" || headerStr === "ket" || headerStr === "catatan") ketIdx = h;
+      else if (headerStr.indexOf("tanggal") !== -1 || headerStr.indexOf("tgl") !== -1 || headerStr.indexOf("date") !== -1) tanggalIdx = h;
+      else if (headerStr.indexOf("grade") !== -1 || headerStr.indexOf("kelas") !== -1 || headerStr.indexOf("class") !== -1) gradeIdx = h;
+      
+      // Look for specific "tugas ziyadah", "tugas murojaah", "tugas materi" columns first
+      else if (headerStr.indexOf("tugas ziyadah") !== -1 || headerStr === "ziyadah") tugasZiyadahIdx = h;
+      else if (headerStr.indexOf("tugas murojaah") !== -1 || headerStr === "murojaah") tugasMurojaahIdx = h;
+      else if (headerStr === "tugas materi" || headerStr === "tugas_materi") tugasMateriIdx = h;
+      else if (headerStr.indexOf("materi") !== -1 || headerStr === "tugas" || headerStr.indexOf("tugas harian") !== -1) legacyMateriIdx = h;
+      
+      else if (headerStr.indexOf("ustadz") !== -1 || headerStr.indexOf("guru") !== -1 || headerStr.indexOf("pembuat") !== -1 || headerStr.indexOf("teacher") !== -1) ustadzIdx = h;
+      else if (headerStr.indexOf("keterangan") !== -1 || headerStr.indexOf("ket") !== -1 || headerStr.indexOf("catatan") !== -1 || headerStr.indexOf("note") !== -1) ketIdx = h;
+      else if (headerStr.indexOf("siswa") !== -1 || headerStr.indexOf("penerima") !== -1 || headerStr.indexOf("student") !== -1) siswaIdx = h;
     }
     
     var tasks = [];
     for (var i = 1; i < data.length; i++) {
       var row = data[i];
-      if (!row[materiIdx]) continue;
+      if (row.length === 0 || !row[0]) continue;
       
-      var rawDate = row[tanggalIdx];
+      var zVal = tugasZiyadahIdx !== -1 ? String(row[tugasZiyadahIdx] !== undefined ? row[tugasZiyadahIdx] : "").trim() : "";
+      var mVal = tugasMurojaahIdx !== -1 ? String(row[tugasMurojaahIdx] !== undefined ? row[tugasMurojaahIdx] : "").trim() : "";
+      var tmVal = tugasMateriIdx !== -1 ? String(row[tugasMateriIdx] !== undefined ? row[tugasMateriIdx] : "").trim() : "";
+      var legVal = legacyMateriIdx !== -1 ? String(row[legacyMateriIdx] !== undefined ? row[legacyMateriIdx] : "").trim() : "";
+      
+      // If separate column values are present, package them into a JSON string so frontend handles it seamlessly
+      var finalMateri = "";
+      if (zVal || mVal || tmVal) {
+        finalMateri = JSON.stringify({
+          ziyadah: zVal,
+          murojaah: mVal,
+          tugasMateri: tmVal
+        });
+      } else {
+        // Fallback to legacy single "materi" column
+        finalMateri = legVal;
+      }
+      
+      var rawDate = tanggalIdx !== -1 ? row[tanggalIdx] : "";
       var formattedDate = "";
       if (rawDate instanceof Date) {
         formattedDate = Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
@@ -312,12 +343,13 @@ function doGet(e) {
       }
       
       tasks.push({
-        id: String(row[idIdx] !== undefined ? row[idIdx] : "").trim(),
+        id: idIdx !== -1 ? String(row[idIdx] !== undefined ? row[idIdx] : "").trim() : "",
         tanggal: formattedDate,
-        grade: String(row[gradeIdx] !== undefined ? row[gradeIdx] : "").trim(),
-        materi: String(row[materiIdx] !== undefined ? row[materiIdx] : "").trim(),
-        ustadz: String(row[ustadzIdx] !== undefined ? row[ustadzIdx] : "").trim(),
-        keterangan: String(row[ketIdx] !== undefined ? row[ketIdx] : "").trim()
+        grade: gradeIdx !== -1 ? String(row[gradeIdx] !== undefined ? row[gradeIdx] : "").trim() : "",
+        materi: finalMateri,
+        ustadz: ustadzIdx !== -1 ? String(row[ustadzIdx] !== undefined ? row[ustadzIdx] : "").trim() : "",
+        keterangan: ketIdx !== -1 ? String(row[ketIdx] !== undefined ? row[ketIdx] : "").trim() : "",
+        siswa: siswaIdx !== -1 ? String(row[siswaIdx] !== undefined ? row[siswaIdx] : "All").trim() : "All"
       });
     }
     return createJsonResponse({ status: "success", data: tasks });
@@ -422,7 +454,7 @@ function doPost(e) {
       if (!sheet) {
         // Buat sheet Tugas Harian jika belum ada
         sheet = ss.insertSheet("Tugas Harian");
-        sheet.appendRow(["ID", "Tanggal", "Grade", "Materi", "Ustadz", "Keterangan"]);
+        sheet.appendRow(["ID", "Tanggal", "Grade", "Tugas Ziyadah", "Tugas Murojaah", "Tugas Materi", "Ustadz", "Keterangan", "Siswa"]);
       }
     } else {
       sheet = ss.getSheetByName("Penilaian") || ss.getSheetByName("penilaian") || ss.getSheets()[0];
@@ -434,14 +466,81 @@ function doPost(e) {
     if (targetTab === "tugas" || targetTab === "tugas_harian" || targetTab === "tugasharian") {
       if (action === "create") {
         var tanggal = postData.tanggal || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-        sheet.appendRow([
-          String(postData.id || ""),
-          tanggal,
-          String(postData.grade || ""),
-          String(postData.materi || ""),
-          String(postData.ustadz || ""),
-          String(postData.keterangan || "")
-        ]);
+        
+        // Find existing headers to map columns dynamically
+        var headers = [];
+        if (sheet.getLastColumn() > 0) {
+          headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+        }
+        
+        if (headers.length === 0) {
+          headers = ["ID", "Tanggal", "Grade", "Tugas Ziyadah", "Tugas Murojaah", "Tugas Materi", "Ustadz", "Keterangan", "Siswa"];
+          sheet.appendRow(headers);
+        }
+        
+        var idIdx = headers.indexOf("ID");
+        var tanggalIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("tanggal") !== -1 || String(h).toLowerCase().indexOf("tgl") !== -1 || String(h).toLowerCase().indexOf("date") !== -1; });
+        var gradeIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("grade") !== -1 || String(h).toLowerCase().indexOf("kelas") !== -1 || String(h).toLowerCase().indexOf("class") !== -1; });
+        
+        var tugasZiyadahIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("ziyadah") !== -1; });
+        var tugasMurojaahIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("murojaah") !== -1; });
+        var tugasMateriIdx = headers.findIndex(function(h) { return String(h).toLowerCase() === "tugas materi" || String(h).toLowerCase() === "tugas_materi"; });
+        var legacyMateriIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("materi") !== -1 || String(h).toLowerCase() === "tugas" || String(h).toLowerCase().indexOf("tugas harian") !== -1; });
+        
+        var ustadzIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("ustadz") !== -1 || String(h).toLowerCase().indexOf("guru") !== -1 || String(h).toLowerCase().indexOf("pembuat") !== -1 || String(h).toLowerCase().indexOf("teacher") !== -1; });
+        var ketIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("keterangan") !== -1 || String(h).toLowerCase().indexOf("ket") !== -1 || String(h).toLowerCase().indexOf("catatan") !== -1 || String(h).toLowerCase().indexOf("note") !== -1; });
+        var siswaIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("siswa") !== -1 || String(h).toLowerCase().indexOf("penerima") !== -1 || String(h).toLowerCase().indexOf("student") !== -1; });
+        
+        if (idIdx === -1) idIdx = 0;
+        if (tanggalIdx === -1) tanggalIdx = 1;
+        if (gradeIdx === -1) gradeIdx = 2;
+        
+        // Parse raw string or extract direct attributes
+        var zVal = "";
+        var mVal = "";
+        var tmVal = "";
+        if (postData.materi) {
+          try {
+            var parsed = JSON.parse(postData.materi);
+            if (parsed && typeof parsed === 'object') {
+              zVal = String(parsed.ziyadah || "").trim();
+              mVal = String(parsed.murojaah || "").trim();
+              tmVal = String(parsed.tugasMateri || parsed.materi || "").trim();
+            } else {
+              tmVal = String(postData.materi).trim();
+            }
+          } catch(e) {
+            tmVal = String(postData.materi).trim();
+          }
+        }
+        if (postData.ziyadah) zVal = String(postData.ziyadah).trim();
+        if (postData.murojaah) mVal = String(postData.murojaah).trim();
+        if (postData.tugasMateri) tmVal = String(postData.tugasMateri).trim();
+        
+        var maxIdx = Math.max(idIdx, tanggalIdx, gradeIdx, ustadzIdx, ketIdx, siswaIdx, tugasZiyadahIdx, tugasMurojaahIdx, tugasMateriIdx, legacyMateriIdx);
+        if (maxIdx < 8) maxIdx = 8;
+        
+        var rowData = new Array(maxIdx + 1).fill("");
+        rowData[idIdx] = String(postData.id || "");
+        rowData[tanggalIdx] = tanggal;
+        rowData[gradeIdx] = String(postData.grade || "");
+        if (ustadzIdx !== -1) rowData[ustadzIdx] = String(postData.ustadz || "");
+        if (ketIdx !== -1) rowData[ketIdx] = String(postData.keterangan || "");
+        if (siswaIdx !== -1) rowData[siswaIdx] = String(postData.siswa || "All");
+        
+        if (tugasZiyadahIdx !== -1) rowData[tugasZiyadahIdx] = zVal;
+        if (tugasMurojaahIdx !== -1) rowData[tugasMurojaahIdx] = mVal;
+        if (tugasMateriIdx !== -1) rowData[tugasMateriIdx] = tmVal;
+        
+        if (legacyMateriIdx !== -1) {
+          if (tugasZiyadahIdx !== -1 || tugasMurojaahIdx !== -1) {
+            rowData[legacyMateriIdx] = tmVal;
+          } else {
+            rowData[legacyMateriIdx] = String(postData.materi || "");
+          }
+        }
+        
+        sheet.appendRow(rowData);
         return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil ditambahkan." });
       } else if (action === "edit") {
         var data = sheet.getDataRange().getValues();
@@ -454,14 +553,77 @@ function doPost(e) {
           }
         }
         if (foundRow !== -1) {
-          sheet.getRange(foundRow, 1, 1, 6).setValues([[
-            idToFind,
-            String(postData.tanggal || ""),
-            String(postData.grade || ""),
-            String(postData.materi || ""),
-            String(postData.ustadz || ""),
-            String(postData.keterangan || "")
-          ]]);
+          var headers = data[0];
+          var idIdx = headers.indexOf("ID");
+          var tanggalIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("tanggal") !== -1 || String(h).toLowerCase().indexOf("tgl") !== -1 || String(h).toLowerCase().indexOf("date") !== -1; });
+          var gradeIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("grade") !== -1 || String(h).toLowerCase().indexOf("kelas") !== -1 || String(h).toLowerCase().indexOf("class") !== -1; });
+          
+          var tugasZiyadahIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("ziyadah") !== -1; });
+          var tugasMurojaahIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("murojaah") !== -1; });
+          var tugasMateriIdx = headers.findIndex(function(h) { return String(h).toLowerCase() === "tugas materi" || String(h).toLowerCase() === "tugas_materi"; });
+          var legacyMateriIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("materi") !== -1 || String(h).toLowerCase() === "tugas" || String(h).toLowerCase().indexOf("tugas harian") !== -1; });
+          
+          var ustadzIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("ustadz") !== -1 || String(h).toLowerCase().indexOf("guru") !== -1 || String(h).toLowerCase().indexOf("pembuat") !== -1 || String(h).toLowerCase().indexOf("teacher") !== -1; });
+          var ketIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("keterangan") !== -1 || String(h).toLowerCase().indexOf("ket") !== -1 || String(h).toLowerCase().indexOf("catatan") !== -1 || String(h).toLowerCase().indexOf("note") !== -1; });
+          var siswaIdx = headers.findIndex(function(h) { return String(h).toLowerCase().indexOf("siswa") !== -1 || String(h).toLowerCase().indexOf("penerima") !== -1 || String(h).toLowerCase().indexOf("student") !== -1; });
+          
+          if (idIdx === -1) idIdx = 0;
+          if (tanggalIdx === -1) tanggalIdx = 1;
+          if (gradeIdx === -1) gradeIdx = 2;
+          
+          var zVal = "";
+          var mVal = "";
+          var tmVal = "";
+          if (postData.materi) {
+            try {
+              var parsed = JSON.parse(postData.materi);
+              if (parsed && typeof parsed === 'object') {
+                zVal = String(parsed.ziyadah || "").trim();
+                mVal = String(parsed.murojaah || "").trim();
+                tmVal = String(parsed.tugasMateri || parsed.materi || "").trim();
+              } else {
+                tmVal = String(postData.materi).trim();
+              }
+            } catch(e) {
+              tmVal = String(postData.materi).trim();
+            }
+          }
+          if (postData.ziyadah) zVal = String(postData.ziyadah).trim();
+          if (postData.murojaah) mVal = String(postData.murojaah).trim();
+          if (postData.tugasMateri) tmVal = String(postData.tugasMateri).trim();
+          
+          var maxIdx = Math.max(idIdx, tanggalIdx, gradeIdx, ustadzIdx, ketIdx, siswaIdx, tugasZiyadahIdx, tugasMurojaahIdx, tugasMateriIdx, legacyMateriIdx);
+          if (maxIdx < 8) maxIdx = 8;
+          
+          var currentLength = sheet.getLastColumn();
+          var arraySize = Math.max(maxIdx + 1, currentLength);
+          var rowData = new Array(arraySize).fill("");
+          
+          var existingRowValues = sheet.getRange(foundRow, 1, 1, arraySize).getValues()[0];
+          for (var k = 0; k < existingRowValues.length; k++) {
+            rowData[k] = existingRowValues[k];
+          }
+          
+          rowData[idIdx] = idToFind;
+          rowData[tanggalIdx] = String(postData.tanggal || "");
+          rowData[gradeIdx] = String(postData.grade || "");
+          if (ustadzIdx !== -1) rowData[ustadzIdx] = String(postData.ustadz || "");
+          if (ketIdx !== -1) rowData[ketIdx] = String(postData.keterangan || "");
+          if (siswaIdx !== -1) rowData[siswaIdx] = String(postData.siswa || "All");
+          
+          if (tugasZiyadahIdx !== -1) rowData[tugasZiyadahIdx] = zVal;
+          if (tugasMurojaahIdx !== -1) rowData[tugasMurojaahIdx] = mVal;
+          if (tugasMateriIdx !== -1) rowData[tugasMateriIdx] = tmVal;
+          
+          if (legacyMateriIdx !== -1) {
+            if (tugasZiyadahIdx !== -1 || tugasMurojaahIdx !== -1) {
+              rowData[legacyMateriIdx] = tmVal;
+            } else {
+              rowData[legacyMateriIdx] = String(postData.materi || "");
+            }
+          }
+          
+          sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
           return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil diperbarui." });
         } else {
           return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
@@ -637,6 +799,7 @@ export const APPS_SCRIPT_INSTRUCTIONS = `### Cara Menghubungkan Google Sheet And
      * **Kolom D:** \`Materi\` (Isi tugas, e.g. "Murojaah Juz 30")
      * **Kolom E:** \`Ustadz\` (Nama ustadz pemberi tugas)
      * **Kolom F:** \`Keterangan\` (Catatan tambahan)
+     * **Kolom G:** \`Siswa\` (Nama siswa sasaran, atau All jika untuk semua siswa)
 3. Isi beberapa baris data awal di tab tersebut sebagai contoh (misal di tab Akun: \`ID: ustadz1, Namaa: Ustadz Ahmad, Password: password123\` dan \`ID: student_kean, Namaa: Kean, Password: kean123\`).
 4. Klik menu **Ekstensi** (Extensions) di bagian atas, lalu pilih **Apps Script**.
 5. Hapus semua kode default di dalam editor Google Apps Script, lalu **Paste** kode yang telah kami siapkan di tab sebelah.

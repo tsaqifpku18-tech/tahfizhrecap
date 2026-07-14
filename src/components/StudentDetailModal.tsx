@@ -29,8 +29,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const successRate = Math.round((totalSuccess / totalSubmissions) * 100);
 
   // Activities break down
-  const totalTahsin = studentHistory.filter((s) => s.kegiatan.toLowerCase().includes('tahsin')).length;
-  const totalZiyadah = studentHistory.filter((s) => s.kegiatan.toLowerCase().includes('ziyadah')).length;
+  const totalTahsin = studentHistory.filter((s) => (s.kegiatan || '').toLowerCase().includes('tahsin')).length;
+  const totalZiyadah = studentHistory.filter((s) => (s.kegiatan || '').toLowerCase().includes('ziyadah')).length;
 
   // Generate dynamic recommendation
   let guidance = '';
