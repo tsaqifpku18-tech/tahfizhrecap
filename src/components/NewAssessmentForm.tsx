@@ -39,6 +39,11 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
   const [baris, setBaris] = useState<number>(3);
   const [ctt, setCtt] = useState('Lancar');
   const [status, setStatus] = useState<'Boleh Lanjut' | 'Ulangi'>('Boleh Lanjut');
+  
+  // Optional task fields directly assigned to students during assessment
+  const [tugasZiyadah, setTugasZiyadah] = useState('');
+  const [tugasMurojaah, setTugasMurojaah] = useState('');
+  const [tugasMateri, setTugasMateri] = useState('');
 
   const [formSuccess, setFormSuccess] = useState(false);
   const [formError, setFormError] = useState('');
@@ -65,6 +70,9 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
       setBaris(editingRecord.baris !== undefined ? editingRecord.baris : 3);
       setCtt(editingRecord.ctt || '');
       setStatus((editingRecord.status || 'Boleh Lanjut') as 'Boleh Lanjut' | 'Ulangi');
+      setTugasZiyadah(editingRecord.tugasZiyadah || '');
+      setTugasMurojaah(editingRecord.tugasMurojaah || '');
+      setTugasMateri(editingRecord.tugasMateri || '');
       setIsNewStudent(false);
       setSelectedStudentId(editingRecord.id || '');
     } else {
@@ -77,6 +85,9 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
       setBaris(3);
       setCtt('Lancar');
       setStatus('Boleh Lanjut');
+      setTugasZiyadah('');
+      setTugasMurojaah('');
+      setTugasMateri('');
     }
   }, [editingRecord]);
 
@@ -120,6 +131,9 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
       status,
       surah: surah.trim(),
       satuan: getSatuanByKegiatan(kegiatan),
+      tugasZiyadah: tugasZiyadah.trim(),
+      tugasMurojaah: tugasMurojaah.trim(),
+      tugasMateri: tugasMateri.trim(),
     };
 
     if (editingRecord && onUpdateSetoran) {
@@ -146,6 +160,9 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
         setBaris(3);
         setCtt('Lancar');
         setStatus('Boleh Lanjut');
+        setTugasZiyadah('');
+        setTugasMurojaah('');
+        setTugasMateri('');
         
         // Clear success notification after 4s
         setTimeout(() => setFormSuccess(false), 4000);
@@ -159,7 +176,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
     <div id="new-assessment-form" className={`bg-white rounded-3xl p-6 shadow-sm border transition-all duration-300 ${editingRecord ? 'border-amber-300 shadow-md ring-2 ring-amber-500/5' : 'border-slate-200'}`}>
       <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-5">
         <div className="flex items-center space-x-3">
-          <div className={`p-2.5 rounded-2xl ${editingRecord ? 'bg-amber-50 text-amber-600 animate-pulse' : 'bg-emerald-50 text-emerald-600'}`}>
+          <div className={`p-2.5 rounded-2xl ${editingRecord ? 'bg-amber-50 text-amber-600 animate-pulse' : 'bg-blue-50 text-[#0000FE]'}`}>
             {editingRecord ? <Pencil className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
           </div>
           <div>
@@ -179,8 +196,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
           <button
             id="toggle-existing-student"
             type="button"
-            className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${
-              !isNewStudent ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+            className={`py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+              !isNewStudent ? 'bg-white text-[#0000FE] shadow-xs' : 'text-slate-500 hover:text-slate-700'
             }`}
             onClick={() => {
               setIsNewStudent(false);
@@ -195,8 +212,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
           <button
             id="toggle-new-student"
             type="button"
-            className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${
-              isNewStudent ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+            className={`py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+              isNewStudent ? 'bg-white text-[#0000FE] shadow-xs' : 'text-slate-500 hover:text-slate-700'
             }`}
             onClick={() => {
               setIsNewStudent(true);
@@ -219,7 +236,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             </label>
             <select
               id="select-registered-student"
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
               value={selectedStudentId}
               onChange={(e) => {
                 const val = e.target.value;
@@ -258,7 +275,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               id="input-student-id"
               type="text"
               readOnly={!isNewStudent}
-              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${
+              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] ${
                 !isNewStudent ? 'bg-slate-50 text-slate-500' : 'bg-white'
               }`}
               value={id}
@@ -275,7 +292,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               id="input-student-name"
               type="text"
               readOnly={!isNewStudent}
-              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${
+              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] ${
                 !isNewStudent ? 'bg-slate-50 text-slate-500' : 'bg-white'
               }`}
               value={nama}
@@ -292,7 +309,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               id="input-student-grade"
               type="text"
               readOnly={!isNewStudent}
-              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${
+              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] ${
                 !isNewStudent ? 'bg-slate-50 text-slate-500' : 'bg-white'
               }`}
               value={grade}
@@ -311,7 +328,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <input
               id="input-submission-date"
               type="date"
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
               value={tanggalSetoran}
               onChange={(e) => setTanggalSetoran(e.target.value)}
             />
@@ -324,7 +341,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <input
               id="input-submission-surah"
               type="text"
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
               value={surah}
               onChange={(e) => setSurah(e.target.value)}
               placeholder="e.g. An-Naba' 1-10, Iqra 4"
@@ -341,9 +358,9 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <button
               id="btn-activity-ziyadah"
               type="button"
-              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                 kegiatan === 'Ziyadah'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-2 ring-emerald-500/10'
+                  ? 'bg-blue-50 text-[#0000FE] border-blue-200 ring-2 ring-[#0000FE]/10'
                   : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
               }`}
               onClick={() => setKegiatan('Ziyadah')}
@@ -420,7 +437,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id="input-baris-count"
                 type="number"
                 min="1"
-                className="w-16 h-10 text-center rounded-xl border border-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-16 h-10 text-center rounded-xl border border-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20"
                 value={baris}
                 onChange={(e) => setBaris(Math.max(1, parseInt(e.target.value) || 1))}
               />
@@ -428,7 +445,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id="btn-increment-baris"
                 type="button"
                 onClick={() => setBaris(baris + 1)}
-                className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+                className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
               >
                 +
               </button>
@@ -445,9 +462,9 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id="btn-status-continue"
                 type="button"
                 onClick={() => setStatus('Boleh Lanjut')}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
+                className={`flex-1 py-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   status === 'Boleh Lanjut'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-xs ring-2 ring-emerald-500/10'
+                    ? 'bg-blue-50 text-[#0000FE] border-blue-300 shadow-xs ring-2 ring-[#0000FE]/10'
                     : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                 }`}
               >
@@ -457,7 +474,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id="btn-status-repeat"
                 type="button"
                 onClick={() => setStatus('Ulangi')}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
+                className={`flex-1 py-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   status === 'Ulangi'
                     ? 'bg-rose-50 text-rose-700 border-rose-300 shadow-xs ring-2 ring-rose-500/10'
                     : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
@@ -477,7 +494,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
           <input
             id="input-notes-text"
             type="text"
-            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 mb-2"
+            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] mb-2"
             value={ctt}
             onChange={(e) => setCtt(e.target.value)}
             placeholder="Tulis nilai kelancaran atau tajwid..."
@@ -489,9 +506,9 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id={`btn-feedback-shortcut-${opt.toLowerCase().replace(/\s+/g, '-')}`}
                 type="button"
                 onClick={() => handleCttSelect(opt)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
                   ctt === opt
-                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    ? 'bg-blue-100 text-[#0000FE] border-blue-300'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
                 }`}
               >
@@ -501,11 +518,61 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
           </div>
         </div>
 
+        {/* Tugas Selanjutnya Section (Optional) */}
+        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-3 mt-4">
+          <div className="flex items-center justify-between pb-1 border-b border-slate-200/60 mb-1">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Tugas Selanjutnya (Opsional)</span>
+            <span className="text-[10px] bg-blue-100 text-[#0000FE] font-bold px-1.5 py-0.5 rounded-full uppercase">Sinkron Sheets</span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                Tugas Ziyadah
+              </label>
+              <input
+                id="input-tugas-ziyadah"
+                type="text"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                value={tugasZiyadah}
+                onChange={(e) => setTugasZiyadah(e.target.value)}
+                placeholder="e.g. Al-Mulk 1-10"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                Tugas Murojaah
+              </label>
+              <input
+                id="input-tugas-murojaah"
+                type="text"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                value={tugasMurojaah}
+                onChange={(e) => setTugasMurojaah(e.target.value)}
+                placeholder="e.g. Juz 30"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                Tugas Materi
+              </label>
+              <input
+                id="input-tugas-materi"
+                type="text"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                value={tugasMateri}
+                onChange={(e) => setTugasMateri(e.target.value)}
+                placeholder="e.g. Tajwid Mad Jaiz"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Notifications and Submission */}
         <div className="pt-3 border-t border-slate-100">
           {formSuccess && (
-            <div id="form-success-alert" className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-3 text-xs flex items-start gap-2 mb-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div id="form-success-alert" className="bg-blue-50 border border-blue-200 text-blue-800 rounded-xl p-3 text-xs flex items-start gap-2 mb-3">
+              <CheckCircle2 className="w-4 h-4 text-[#0000FE] shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">Alhamdulillah!</span> Data setoran hafalan berhasil {editingRecord ? 'diperbarui' : 'dicatat'} dan disinkronisasikan ke database.
               </div>
@@ -527,7 +594,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id="btn-cancel-edit-assessment"
                 type="button"
                 onClick={onCancelEdit}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-sm transition-colors duration-200 flex items-center justify-center gap-2 border border-slate-200"
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-sm transition-colors duration-200 flex items-center justify-center gap-2 border border-slate-200 cursor-pointer"
               >
                 <X className="w-4 h-4" /> Batal
               </button>
@@ -536,10 +603,10 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               id="btn-submit-assessment"
               type="submit"
               disabled={isSubmitting}
-              className={`font-bold py-3 rounded-xl text-sm transition-colors duration-200 shadow-sm flex items-center justify-center gap-2 ${
+              className={`font-bold py-3 rounded-xl text-sm transition-colors duration-200 shadow-sm flex items-center justify-center gap-2 cursor-pointer ${
                 editingRecord 
                   ? 'flex-[2] bg-amber-600 hover:bg-amber-700 text-white disabled:bg-amber-400' 
-                  : 'w-full bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-emerald-400'
+                  : 'w-full bg-[#0000FE] hover:bg-[#0000D0] text-white disabled:bg-blue-300'
               }`}
             >
               {isSubmitting ? (

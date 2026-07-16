@@ -37,7 +37,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   let adviceColor = '';
   if (successRate >= 80) {
     guidance = 'Maa Syaa Allah! Kelancaran setoran sangat tinggi. Siswa menunjukkan pemahaman tajwid dan makhraj yang mantap. Sangat direkomendasikan untuk melanjutkan Ziyadah hafalan baru secara konsisten.';
-    adviceColor = 'text-emerald-800 bg-emerald-50 border-emerald-100';
+    adviceColor = 'text-blue-800 bg-blue-50 border-blue-100';
   } else if (successRate >= 50) {
     guidance = 'Alhamdulillah, perkembangan cukup baik. Namun, beberapa setoran perlu diulang untuk memperkuat hafalan (murojaah). Disarankan meluangkan waktu 15 menit ekstra sebelum menyetor untuk mengulang ayat.';
     adviceColor = 'text-amber-800 bg-amber-50 border-amber-100';
@@ -51,7 +51,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col border border-slate-200">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-6 relative">
+        <div className="bg-gradient-to-r from-[#0000FE] to-blue-700 text-white p-6 relative">
           <button
             id="btn-close-modal"
             onClick={onClose}
@@ -69,7 +69,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                 SISWA #{studentId || 'N/A'}
               </span>
               <h2 className="text-2xl font-bold mt-1 tracking-tight">{studentName}</h2>
-              <p className="text-emerald-100 text-xs font-medium mt-0.5">Kelas/Grade: <span className="font-bold text-white">{grade}</span></p>
+              <p className="text-blue-100 text-xs font-medium mt-0.5">Kelas/Grade: <span className="font-bold text-white">{grade}</span></p>
             </div>
           </div>
         </div>
@@ -93,7 +93,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center space-y-1">
               <span className="text-[10px] uppercase font-bold text-slate-400">Tingkat Lolos</span>
-              <p className={`text-lg font-extrabold ${successRate >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+              <p className={`text-lg font-extrabold ${successRate >= 80 ? 'text-[#0000FE]' : 'text-amber-600'}`}>
                 {successRate}%
               </p>
             </div>
@@ -128,14 +128,14 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   <span>{totalZiyadah} setoran ({totalSubmissions > 0 ? Math.round((totalZiyadah / totalSubmissions) * 100) : 0}%)</span>
                 </div>
                 <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${totalSubmissions > 0 ? (totalZiyadah / totalSubmissions) * 100 : 0}%` }}></div>
+                  <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${totalSubmissions > 0 ? (totalZiyadah / totalSubmissions) * 100 : 0}%` }}></div>
                 </div>
               </div>
             </div>
 
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-center space-y-2">
               <h4 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-emerald-500" /> Nilai Terakhir
+                <TrendingUp className="w-4 h-4 text-blue-500" /> Nilai Terakhir
               </h4>
               <p className="text-sm italic text-slate-600 font-medium">
                 "{studentHistory[0]?.ctt || 'Tidak ada nilai'}"
@@ -149,7 +149,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
           {/* Timeline of Submissions */}
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
-              <Calendar className="w-4.5 h-4.5 text-emerald-600" /> Riwayat Setoran Lengkap
+              <Calendar className="w-4.5 h-4.5 text-[#0000FE]" /> Riwayat Setoran Lengkap
             </h3>
             
             <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
@@ -163,7 +163,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     <div className="flex items-center gap-2">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         item.kegiatan === 'Ziyadah'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          ? 'bg-blue-50 text-[#0000FE] border border-blue-100'
                           : item.kegiatan === 'Tahsin (Tilawah)'
                           ? 'bg-blue-50 text-blue-700 border border-blue-100'
                           : item.kegiatan === "Tahsin (IQRA')"
@@ -192,7 +192,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   <div>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                       item.status === 'Boleh Lanjut' 
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                        ? 'bg-blue-50 text-[#0000FE] border border-blue-200' 
                         : 'bg-rose-50 text-rose-700 border border-rose-200'
                     }`}>
                       {item.status}

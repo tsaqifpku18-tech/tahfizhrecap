@@ -68,7 +68,7 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-emerald-600" /> Statistik Mingguan
+              <TrendingUp className="w-4 h-4 text-[#0000FE]" /> Statistik Mingguan
             </h3>
             <p className="text-xs text-slate-500">Frekuensi setoran harian (7 sesi aktif terakhir)</p>
           </div>
@@ -87,8 +87,8 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
             <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-auto overflow-visible">
               <defs>
                 <linearGradient id="chart-glow" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="#0000FE" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#0000FE" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
@@ -128,7 +128,7 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
                 <path
                   d={linePath}
                   fill="none"
-                  stroke="#10b981"
+                  stroke="#0000FE"
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -153,7 +153,7 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
                     cx={p.x}
                     cy={p.y}
                     r="4"
-                    fill="#10b981"
+                    fill="#0000FE"
                     stroke="#ffffff"
                     strokeWidth="1.5"
                     className="transition-all duration-200 group-hover:r-6"
@@ -203,7 +203,7 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
             </div>
             <div className="flex justify-between items-center text-xs font-semibold">
               <span className="text-slate-500">Ziyadah ({ziyadahCount} setoran)</span>
-              <span className="text-emerald-600">{ziyadahPct}%</span>
+              <span className="text-indigo-600">{ziyadahPct}%</span>
             </div>
             {murojaahCount > 0 && (
               <div className="flex justify-between items-center text-xs font-semibold">
@@ -220,7 +220,7 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
                 title={`Tahsin: ${tahsinPct}%`}
               ></div>
               <div
-                className="bg-emerald-500 h-full transition-all duration-500"
+                className="bg-indigo-500 h-full transition-all duration-500"
                 style={{ width: `${ziyadahPct}%` }}
                 title={`Ziyadah: ${ziyadahPct}%`}
               ></div>
@@ -236,12 +236,12 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
         {/* 2B. Status: Boleh Lanjut vs Ulangi */}
         <div className="space-y-3 pt-4 border-t border-slate-100">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Hasil Evaluasi
+            <CheckCircle2 className="w-4 h-4 text-[#0000FE]" /> Hasil Evaluasi
           </h3>
           <div className="space-y-2">
             <div className="flex justify-between items-center text-xs font-semibold">
               <span className="text-slate-500">Boleh Lanjut ({lanjutCount} setoran)</span>
-              <span className="text-emerald-600">{lanjutPct}%</span>
+              <span className="text-[#0000FE]">{lanjutPct}%</span>
             </div>
             <div className="flex justify-between items-center text-xs font-semibold">
               <span className="text-slate-500">Ulangi ({ulangiCount} setoran)</span>
@@ -251,7 +251,7 @@ export const StatsCharts: React.FC<StatsChartsProps> = ({ data }) => {
             {/* Split Bar Chart */}
             <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
               <div
-                className="bg-emerald-500 h-full transition-all duration-500"
+                className="bg-[#0000FE] h-full transition-all duration-500"
                 style={{ width: `${lanjutPct}%` }}
                 title={`Boleh Lanjut: ${lanjutPct}%`}
               ></div>

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { KeyRound, User, Eye, EyeOff, BookOpen, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
+import { KeyRound, User, Eye, EyeOff, AlertCircle, Sparkles, Loader2, BookOpen, ShieldCheck } from 'lucide-react';
 import { UserAccount, UserSession } from '../types';
 import { DEMO_AKUN } from '../data';
+import { AlWildanLogo } from './AlWildanLogo';
+// @ts-ignore
+import alWildanBuilding from '../assets/al_wildan_building.jpg';
 
 interface LoginPageProps {
   appsScriptUrl: string | null;
@@ -109,145 +112,205 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Background Decorative Pattern */}
-      <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#0f766e_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none"></div>
+    <div className="min-h-screen bg-[#070D19] flex font-sans overflow-hidden">
+      
+      {/* LEFT SIDE: School Photo Backdrop (Visible on lg/xl screen sizes) */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-950 items-center justify-center overflow-hidden">
+        {/* Full bleed school building image */}
+        <img 
+          src={alWildanBuilding} 
+          alt="Al-Wildan School Building" 
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-70 transform hover:scale-105 transition-transform duration-10000 ease-out"
+        />
+        
+        {/* Sleek Gradient Overlay for maximum readability */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent"></div>
+        <div className="absolute inset-0 bg-emerald-950/20 mix-blend-multiply"></div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <div className="flex justify-center">
-          <div className="bg-emerald-600 p-3 rounded-3xl shadow-md text-white flex items-center justify-center">
-            <BookOpen className="w-10 h-10 animate-pulse" />
+        {/* Floating welcome message */}
+        <div className="relative z-10 p-12 max-w-lg space-y-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-950/60 backdrop-blur-md shadow-md text-emerald-400">
+            <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider">Tahfizh Recap Online System</span>
+          </div>
+
+          <h1 className="text-4xl font-black tracking-tight text-white leading-tight">
+            AL-WILDAN <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
+              INTERNATIONAL ISLAMIC SCHOOL 10
+            </span>
+          </h1>
+
+          <p className="text-sm text-slate-300 leading-relaxed">
+            Selamat datang di sistem rekapitulasi hafalan Quran terintegrasi. Membantu orang tua siswa memantau progres hafalan putra-putri secara akurat, dinamis, dan berkala.
+          </p>
+
+          <div className="pt-4 flex items-center gap-6 border-t border-slate-800/60 text-xs text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>Sistem Terenkripsi</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4 text-teal-400" />
+              <span>Kurikulum Internasional</span>
+            </div>
           </div>
         </div>
-        <h2 className="mt-6 text-center text-2xl font-extrabold tracking-tight text-slate-800 flex items-center justify-center gap-1.5">
-          <Sparkles className="w-5 h-5 text-emerald-600" /> Ahlan wa Sahlan Abu/Ummu..
-        </h2>
-        <p className="mt-2 text-center text-xs sm:text-sm text-slate-500 font-medium">
-          Tahfizh Recap Online. Terupadate. Tersistematis. Terbaik di Indonesia
-        </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4">
-        <div className="bg-white py-8 px-6 shadow-xl border border-slate-100 rounded-3xl space-y-6 sm:px-10">
-          <div className="border-b border-slate-150 pb-4">
-            <h3 className="text-lg font-bold text-slate-700">Masuk ke Sistem</h3>
-            <p className="text-xs text-slate-400">Silakan masukkan kredensial yang terdaftar di lembar Akun</p>
+      {/* RIGHT SIDE / MAIN CONTENT: Pure modern login panel */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-12 relative">
+        
+        {/* Subtle decorative layout gradients (for mobile fallback style) */}
+        <div className="absolute top-[-10%] right-[-10%] w-[350px] h-[350px] rounded-full bg-emerald-500/5 blur-[120px] pointer-events-none lg:hidden"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[350px] h-[350px] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none lg:hidden"></div>
+        
+        {/* Underlay of the photo building on mobile/tablet for atmospheric backdrop */}
+        <div className="absolute inset-0 bg-slate-950 opacity-40 mix-blend-overlay pointer-events-none lg:hidden">
+          <img src={alWildanBuilding} alt="back" className="w-full h-full object-cover" />
+        </div>
+
+        <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center">
+          {/* Circular Al-Wildan Logo Recreated Vectorially (No white background!) */}
+          <div className="flex justify-center transition-all duration-300 transform hover:scale-105">
+            <AlWildanLogo size={140} className="filter drop-shadow-[0_8px_16px_rgba(16,185,129,0.2)]" />
           </div>
+          
+          <h2 className="mt-5 text-center text-2xl font-black tracking-tight text-white flex flex-col items-center gap-0.5">
+            <span className="text-slate-400 text-xs font-extrabold tracking-widest uppercase">PORTAL AKADEMIK</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-emerald-300 to-amber-300 font-black text-2xl tracking-wide uppercase">
+              TAHFIZH RECAP SYSTEM
+            </span>
+          </h2>
+          
+          <p className="mt-2 text-xs font-semibold text-slate-400 max-w-xs mx-auto lg:hidden">
+            Al-Wildan International Islamic School 10 Jakarta
+          </p>
+        </div>
 
-          {errorMsg && (
-            <div id="login-error-alert" className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-2xl flex items-start gap-2.5 text-xs font-medium animate-shake">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+          <div className="bg-slate-900/70 backdrop-blur-xl border border-slate-800/80 py-8 px-6 shadow-2xl rounded-[32px] space-y-6 sm:px-10">
+            <div className="border-b border-slate-800/60 pb-4">
+              <h3 className="text-lg font-bold text-white tracking-wide">Masuk ke Sistem</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Silakan masukkan kredensial yang terdaftar di lembar Akun</p>
             </div>
-          )}
 
-          <form className="space-y-5" onSubmit={handleLogin}>
-            {/* ID Input */}
-            <div className="space-y-1.5">
-              <label htmlFor="user-id-input" className="block text-xs font-bold text-slate-600">
-                ID Pengguna (Siswa / Ustadz)
-              </label>
-              <div className="relative rounded-xl shadow-xs">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <User className="h-4 w-4" />
-                </div>
-                <input
-                  id="user-id-input"
-                  name="userId"
-                  type="text"
-                  required
-                  autoFocus
-                  placeholder="Contoh: ustadz1 atau student_kean"
-                  value={idInput}
-                  onChange={(e) => setIdInput(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-3 text-sm border border-slate-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white text-slate-800 transition-all font-sans"
-                />
+            {errorMsg && (
+              <div id="login-error-alert" className="bg-rose-950/40 border border-rose-800/50 text-rose-300 p-3.5 rounded-2xl flex items-start gap-2.5 text-xs font-medium animate-shake">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                <span>{errorMsg}</span>
               </div>
-            </div>
+            )}
 
-            {/* Password Input */}
-            <div className="space-y-1.5">
-              <label htmlFor="password-input" className="block text-xs font-bold text-slate-600">
-                Kata Sandi (Password)
-              </label>
-              <div className="relative rounded-xl shadow-xs">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <KeyRound className="h-4 w-4" />
+            <form className="space-y-5" onSubmit={handleLogin}>
+              {/* ID Input */}
+              <div className="space-y-1.5">
+                <label htmlFor="user-id-input" className="block text-xs font-bold text-slate-300 tracking-wider uppercase">
+                  ID Pengguna (Siswa / Ustadz)
+                </label>
+                <div className="relative rounded-xl shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <input
+                    id="user-id-input"
+                    name="userId"
+                    type="text"
+                    required
+                    autoFocus
+                    placeholder="Contoh: ustadz1 atau student_kean"
+                    value={idInput}
+                    onChange={(e) => setIdInput(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-3.5 text-sm border border-slate-800 rounded-xl bg-slate-950/40 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-slate-950/80 transition-all font-sans font-medium"
+                  />
                 </div>
+              </div>
+
+              {/* Password Input */}
+              <div className="space-y-1.5">
+                <label htmlFor="password-input" className="block text-xs font-bold text-slate-300 tracking-wider uppercase">
+                  Kata Sandi (Password)
+                </label>
+                <div className="relative rounded-xl shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <KeyRound className="h-4 w-4" />
+                  </div>
+                  <input
+                    id="password-input"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Masukkan kata sandi Anda"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="block w-full pl-10 pr-10 py-3.5 text-sm border border-slate-800 rounded-xl bg-slate-950/40 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-slate-950/80 transition-all font-sans font-medium"
+                  />
+                  <button
+                    type="button"
+                    id="btn-toggle-password-visibility"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Show Password Checkbox */}
+              <div className="flex items-center">
                 <input
-                  id="password-input"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  placeholder="Masukkan kata sandi Anda"
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  className="block w-full pl-10 pr-10 py-3 text-sm border border-slate-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white text-slate-800 transition-all font-sans"
+                  id="checkbox-show-password"
+                  name="show-password-cb"
+                  type="checkbox"
+                  checked={showPassword}
+                  onChange={(e) => setShowPassword(e.target.checked)}
+                  className="h-4 w-4 text-emerald-500 focus:ring-emerald-500/20 border-slate-800 bg-slate-950 rounded cursor-pointer"
                 />
+                <label htmlFor="checkbox-show-password" className="ml-2 block text-xs font-semibold text-slate-400 hover:text-slate-200 cursor-pointer select-none transition-colors">
+                  Perlihatkan password
+                </label>
+              </div>
+
+              {/* Login Button */}
+              <div>
                 <button
-                  type="button"
-                  id="btn-toggle-password-visibility"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
+                  type="submit"
+                  id="btn-submit-login"
+                  disabled={isLoading}
+                  className="w-full flex justify-center py-4 px-4 border border-transparent rounded-xl shadow-lg shadow-emerald-950/20 text-xs font-bold uppercase tracking-wider text-white bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 active:scale-98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-emerald-500 transition-all disabled:opacity-75 cursor-pointer"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {isLoading ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="w-4 h-4 animate-spin text-white" /> Memeriksa Kredensial...
+                    </span>
+                  ) : (
+                    'Masuk Aplikasi'
+                  )}
                 </button>
               </div>
-            </div>
+            </form>
 
-            {/* Show Password Checkbox (As requested: "terakhir dibawah kolom password pada halaman login sediakan ceklist box perlihatkan password agar memudahkan pengetikan password") */}
-            <div className="flex items-center">
-              <input
-                id="checkbox-show-password"
-                name="show-password-cb"
-                type="checkbox"
-                checked={showPassword}
-                onChange={(e) => setShowPassword(e.target.checked)}
-                className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded cursor-pointer"
-              />
-              <label htmlFor="checkbox-show-password" className="ml-2 block text-xs font-medium text-slate-500 cursor-pointer select-none">
-                Perlihatkan password
-              </label>
+            {/* Account Source Indicator */}
+            <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-800/60 pt-4">
+              <span>Mode Sumber Data Akun:</span>
+              {isFetchingAccounts ? (
+                <span className="flex items-center gap-1 text-emerald-400">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Menghubungkan...
+                </span>
+              ) : usingDemoData ? (
+                <span className="font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
+                  Akun Demo Lokal
+                </span>
+              ) : (
+                <span className="font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                  Akun Google Sheets
+                </span>
+              )}
             </div>
-
-            {/* Login Button */}
-            <div>
-              <button
-                type="submit"
-                id="btn-submit-login"
-                disabled={isLoading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all disabled:opacity-75"
-              >
-                {isLoading ? (
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Memeriksa Kredensial...
-                  </span>
-                ) : (
-                  'Masuk Aplikasi'
-                )}
-              </button>
-            </div>
-          </form>
-
-          {/* Account Source Indicator */}
-          <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-100 pt-3">
-            <span>Mode Sumber Data Akun:</span>
-            {isFetchingAccounts ? (
-              <span className="flex items-center gap-1 text-amber-500">
-                <Loader2 className="w-3 h-3 animate-spin" /> Menghubungkan...
-              </span>
-            ) : usingDemoData ? (
-              <span className="font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
-                Akun Demo Lokal
-              </span>
-            ) : (
-              <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                Akun Google Sheets (Tab Akun)
-              </span>
-            )}
           </div>
         </div>
       </div>
     </div>
   );
 }
+

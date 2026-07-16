@@ -9,6 +9,9 @@ export interface Setoran {
   status: 'Boleh Lanjut' | 'Ulangi' | string;
   surah?: string; // Nama surah/materi yang disetorkan
   satuan?: string; // Satuan kegiatan (baris / halaman)
+  tugasZiyadah?: string;
+  tugasMurojaah?: string;
+  tugasMateri?: string;
 }
 
 export interface Settings {

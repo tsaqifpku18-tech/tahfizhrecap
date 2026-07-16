@@ -7,7 +7,7 @@ interface StatsCardProps {
   icon: React.ReactNode;
   colorClass: string;
   bgColorClass: string;
-  theme?: 'white' | 'dark' | 'emerald' | 'amber';
+  theme?: 'white' | 'dark' | 'emerald' | 'amber' | 'blue';
 }
 
 export const StatsCard: React.FC<StatsCardProps> = ({
@@ -28,13 +28,18 @@ export const StatsCard: React.FC<StatsCardProps> = ({
   if (theme === 'dark') {
     cardClass = 'bg-slate-900 text-white border-slate-800 shadow-lg';
     titleClass = 'text-slate-400';
-    valueClass = 'text-emerald-400';
+    valueClass = 'text-blue-400';
     descClass = 'text-slate-400 italic';
+  } else if (theme === 'blue') {
+    cardClass = 'bg-blue-50/80 text-blue-900 border-blue-100 shadow-xs';
+    titleClass = 'text-blue-800/80';
+    valueClass = 'text-[#0000FE]';
+    descClass = 'text-blue-700/80';
   } else if (theme === 'emerald') {
-    cardClass = 'bg-emerald-50 text-emerald-900 border-emerald-100 shadow-xs';
-    titleClass = 'text-emerald-800/80';
-    valueClass = 'text-emerald-600';
-    descClass = 'text-emerald-700/80';
+    cardClass = 'bg-blue-50 text-blue-900 border-blue-100 shadow-xs';
+    titleClass = 'text-blue-800/80';
+    valueClass = 'text-[#0000FE]';
+    descClass = 'text-blue-700/80';
   } else if (theme === 'amber') {
     cardClass = 'bg-amber-50 text-amber-900 border-amber-100 shadow-xs';
     titleClass = 'text-amber-800/80';

@@ -22,7 +22,11 @@ import {
   UserCheck,
   ClipboardList,
   Calendar,
-  Plus
+  Plus,
+  TrendingUp,
+  Award,
+  GraduationCap,
+  Music
 } from 'lucide-react';
 import { Setoran, Settings, UserSession, TugasHarian } from './types';
 import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE } from './data';
@@ -175,7 +179,7 @@ export default function App() {
   // 1. Core States
   const [setoran, setSetoran] = useState<Setoran[]>(DEMO_SETORAN);
   const [tugasHarian, setTugasHarian] = useState<TugasHarian[]>(DEMO_TUGAS_HARIAN);
-  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas'>('rekap');
+  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik'>('rekap');
   const [editingTugas, setEditingTugas] = useState<TugasHarian | null>(null);
   const [isSubmittingTugas, setIsSubmittingTugas] = useState<boolean>(false);
   const [confirmDeleteTugas, setConfirmDeleteTugas] = useState<TugasHarian | null>(null);
@@ -226,7 +230,7 @@ export default function App() {
   };
 
   // Default Google Apps Script URL set by the developer
-  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx6P7dfuAD3AleS7yvK7ce5YagAaDKm8mLBKOLZgBuhPujlHlSJZxTkMDZEf-PV_6Lz/exec';
+  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwK0a1doiZQ2LA4MimqLdgdNO_bifCyOBkSQDfIAZSluRLyG_beHXp6e_AY_EHHGM28/exec';
 
   // Settings state (Loaded from localStorage with fallback to default Apps Script URL)
   const [settings, setSettings] = useState<Settings>(() => {
@@ -767,11 +771,46 @@ export default function App() {
     const totalLancar = filteredSetoran.filter((s) => (s.status || '').toLowerCase().includes('lanjut')).length;
     const lancarRate = totalSetoran > 0 ? Math.round((totalLancar / totalSetoran) * 100) : 0;
 
+    // Ziyadah average
+    const ziyadahSetoran = filteredSetoran.filter(s => (s.kegiatan || '').toLowerCase().includes('ziyadah'));
+    const totalZiyadahLines = ziyadahSetoran.reduce((acc, curr) => acc + curr.baris, 0);
+    const avgZiyadah = ziyadahSetoran.length > 0 ? Math.round((totalZiyadahLines / ziyadahSetoran.length) * 10) / 10 : 0;
+
+    // Murojaah average
+    const murojaahSetoran = filteredSetoran.filter(s => (s.kegiatan || '').toLowerCase().includes('murojaah') || (s.kegiatan || '').toLowerCase().includes('murajaah'));
+    const totalMurojaahLines = murojaahSetoran.reduce((acc, curr) => acc + curr.baris, 0);
+    const avgMurojaah = murojaahSetoran.length > 0 ? Math.round((totalMurojaahLines / murojaahSetoran.length) * 10) / 10 : 0;
+
+    // Tahsin (IQRA') average
+    const tahsinIqraSetoran = filteredSetoran.filter(s => (s.kegiatan || '').toLowerCase().includes('iqra'));
+    const totalTahsinIqraLines = tahsinIqraSetoran.reduce((acc, curr) => acc + curr.baris, 0);
+    const avgTahsinIqra = tahsinIqraSetoran.length > 0 ? Math.round((totalTahsinIqraLines / tahsinIqraSetoran.length) * 10) / 10 : 0;
+
+    // Tahsin (Qoidah) average
+    const tahsinQoidahSetoran = filteredSetoran.filter(s => (s.kegiatan || '').toLowerCase().includes('qoidah') || (s.kegiatan || '').toLowerCase().includes('qaidah'));
+    const totalTahsinQoidahLines = tahsinQoidahSetoran.reduce((acc, curr) => acc + curr.baris, 0);
+    const avgTahsinQoidah = tahsinQoidahSetoran.length > 0 ? Math.round((totalTahsinQoidahLines / tahsinQoidahSetoran.length) * 10) / 10 : 0;
+
+    // Tahsin (Tilawah) average
+    const tahsinTilawahSetoran = filteredSetoran.filter(s => (s.kegiatan || '').toLowerCase().includes('tilawah'));
+    const totalTahsinTilawahLines = tahsinTilawahSetoran.reduce((acc, curr) => acc + curr.baris, 0);
+    const avgTahsinTilawah = tahsinTilawahSetoran.length > 0 ? Math.round((totalTahsinTilawahLines / tahsinTilawahSetoran.length) * 10) / 10 : 0;
+
     return {
       totalSetoran,
       totalSiswa,
       lancarRate,
       avgBaris,
+      avgZiyadah,
+      avgMurojaah,
+      avgTahsinIqra,
+      avgTahsinQoidah,
+      avgTahsinTilawah,
+      ziyadahCount: ziyadahSetoran.length,
+      murojaahCount: murojaahSetoran.length,
+      tahsinIqraCount: tahsinIqraSetoran.length,
+      tahsinQoidahCount: tahsinQoidahSetoran.length,
+      tahsinTilawahCount: tahsinTilawahSetoran.length,
     };
   }, [filteredSetoran]);
 
@@ -810,7 +849,7 @@ export default function App() {
       )}
 
       {/* Modern Banner Header */}
-      <header id="dashboard-header" className="bg-gradient-to-r from-emerald-700 via-emerald-800 to-teal-800 text-white shadow-md relative overflow-hidden">
+      <header id="dashboard-header" className="bg-gradient-to-r from-[#0000FE] to-[#FFFFFF] text-slate-900 shadow-md relative overflow-hidden">
         {/* Subtle decorative background pattern */}
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
         
@@ -819,20 +858,20 @@ export default function App() {
             
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="bg-emerald-500/20 text-emerald-300 text-xs font-extrabold tracking-widest px-3 py-1 rounded-full uppercase border border-emerald-400/30 flex items-center gap-1">
+                <span className="bg-white/25 text-white text-xs font-extrabold tracking-widest px-3 py-1 rounded-full uppercase border border-white/40 flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5" /> Portal Tahfizh Qur'an
                 </span>
                 
                 {/* Active User Session Indicator */}
-                <span className="bg-white/10 text-emerald-100 text-[11px] font-semibold px-3 py-1 rounded-full border border-white/10 flex items-center gap-1">
-                  <UserCheck className="w-3.5 h-3.5 text-emerald-300" />
-                  Profil: <strong className="text-white font-bold">{currentUser.nama}</strong> ({currentUser.role === 'ustadz' ? 'Ustadz' : 'Siswa'})
+                <span className="bg-white/30 text-[#0000FE] text-[11px] font-bold px-3 py-1 rounded-full border border-[#0000FE]/20 flex items-center gap-1">
+                  <UserCheck className="w-3.5 h-3.5 text-[#0000FE]" />
+                  Profil: <strong className="text-slate-900 font-bold">{currentUser.nama}</strong> ({currentUser.role === 'ustadz' ? 'Ustadz' : 'Siswa'})
                 </span>
               </div>
-              <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white">
+              <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white drop-shadow-sm">
                 Dashboard Tahfizh Recap 2 INTER 3
               </h1>
-              <p className="text-emerald-100 text-xs sm:text-sm font-medium">
+              <p className="text-blue-50 text-xs sm:text-sm font-semibold max-w-2xl">
                 Sistem rekapitulasi evaluasi setoran hafalan (Tahsin & Ziyadah) terintegrasi langsung dengan Google Sheets.
               </p>
             </div>
@@ -843,7 +882,7 @@ export default function App() {
                 id="btn-sync-sheets"
                 onClick={handleManualSync}
                 disabled={isSyncing}
-                className="bg-teal-600 hover:bg-teal-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50"
+                className="bg-[#0000FE] hover:bg-[#0000D0] text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                 title={usingDemoData ? "Refresh database contoh lokal" : "Sinkronisasi data ulang dengan Google Sheets"}
               >
                 <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -854,7 +893,7 @@ export default function App() {
               <button
                 id="btn-logout"
                 onClick={handleLogout}
-                className="bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex items-center gap-2"
+                className="bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
                 title="Keluar dari Akun Anda"
               >
                 <LogOut className="w-4 h-4" />
@@ -875,9 +914,9 @@ export default function App() {
             <button
               id="tab-rekap-btn"
               onClick={() => setActiveTab('rekap')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'rekap'
-                  ? 'bg-emerald-600 text-white shadow-sm'
+                  ? 'bg-[#0000FE] text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -887,19 +926,31 @@ export default function App() {
             <button
               id="tab-tugas-btn"
               onClick={() => setActiveTab('tugas')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'tugas'
-                  ? 'bg-emerald-600 text-white shadow-sm'
+                  ? 'bg-[#0000FE] text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <ClipboardList className="w-4 h-4" />
               Tugas Harian
               {tugasHarian.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'tugas' ? 'bg-white text-emerald-700 font-extrabold' : 'bg-slate-200 text-slate-600 font-extrabold'}`}>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'tugas' ? 'bg-white text-[#0000FE] font-extrabold' : 'bg-slate-200 text-slate-600 font-extrabold'}`}>
                   {tugasHarian.length}
                 </span>
               )}
+            </button>
+            <button
+              id="tab-statistik-btn"
+              onClick={() => setActiveTab('statistik')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'statistik'
+                  ? 'bg-[#0000FE] text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" />
+              Statistik & Grafik
             </button>
           </div>
           
@@ -924,7 +975,7 @@ export default function App() {
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                  <FileSpreadsheet className="w-5 h-5 text-[#0000FE]" />
                   Panduan Hubungan Google Sheets
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">Ikuti langkah-langkah di bawah ini untuk menghubungkan aplikasi Anda ke spreadsheet real-time.</p>
@@ -964,7 +1015,7 @@ export default function App() {
                         navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
                         alert("Alhamdulillah, kode Apps Script berhasil disalin ke clipboard!");
                       }}
-                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] shadow-sm active:scale-95 transition-all"
+                      className="px-2.5 py-1 bg-[#0000FE] hover:bg-[#0000D0] text-white font-bold rounded-lg text-[10px] shadow-sm active:scale-95 transition-all cursor-pointer"
                     >
                       Salin Kode
                     </button>
@@ -975,53 +1026,10 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'rekap' ? (
+        {activeTab === 'rekap' && (
           <>
-            {/* Overview KPI widgets card row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatsCard
-            title="Total Setoran"
-            value={dashboardStats.totalSetoran}
-            description="Rekaman setoran terkumpul"
-            icon={<Hash className="w-5 h-5" />}
-            colorClass="text-emerald-400"
-            bgColorClass="bg-slate-800"
-            theme="dark"
-          />
-          <StatsCard
-            title="Siswa Aktif"
-            value={dashboardStats.totalSiswa}
-            description="Siswa terdaftar aktif"
-            icon={<Users className="w-5 h-5" />}
-            colorClass="text-slate-600"
-            bgColorClass="bg-slate-100"
-            theme="white"
-          />
-          <StatsCard
-            title="Tingkat Kelancaran"
-            value={`${dashboardStats.lancarRate}%`}
-            description="Rata-rata status 'Boleh Lanjut'"
-            icon={<CheckCircle2 className="w-5 h-5" />}
-            colorClass="text-emerald-700"
-            bgColorClass="bg-emerald-100"
-            theme="emerald"
-          />
-          <StatsCard
-            title="Rata-rata Baris"
-            value={dashboardStats.avgBaris}
-            description="Baris terbaca per setoran"
-            icon={<BookOpen className="w-5 h-5" />}
-            colorClass="text-amber-700"
-            bgColorClass="bg-amber-100"
-            theme="amber"
-          />
-        </div>
-
-        {/* Live Visual Analytics section */}
-        <StatsCharts data={filteredSetoran} />
-
-        {/* Content Bento Grid: Form & Student Table with search/filters */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Content Bento Grid: Form & Student Table with search/filters */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Column 1: Input Assessment Form or Student Profile Progress Card */}
           <div className="lg:col-span-1 space-y-6">
@@ -1037,12 +1045,12 @@ export default function App() {
             ) : (
               <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-6">
                 <div className="border-b border-slate-100 pb-5 text-center">
-                  <div className="inline-flex bg-emerald-150 text-emerald-800 p-4 rounded-full mb-3 border-4 border-emerald-50">
-                    <UserCheck className="w-8 h-8 text-emerald-600" />
+                  <div className="inline-flex bg-blue-100 text-blue-800 p-4 rounded-full mb-3 border-4 border-blue-50">
+                    <UserCheck className="w-8 h-8 text-[#0000FE]" />
                   </div>
                   <h3 className="text-xl font-extrabold text-slate-800">{currentUser.nama}</h3>
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 mt-2 uppercase tracking-wider">
-                    <Sparkles className="w-3 h-3 text-emerald-600" /> Akun Siswa Aktif
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0000FE] border border-blue-100 mt-2 uppercase tracking-wider">
+                    <Sparkles className="w-3 h-3 text-[#0000FE]" /> Akun Siswa Aktif
                   </span>
                 </div>
                 
@@ -1054,18 +1062,18 @@ export default function App() {
                       <span className="text-[10px] text-slate-400 font-medium">Total Setoran</span>
                     </div>
                     <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center">
-                      <span className="block text-2xl font-black text-emerald-600">{dashboardStats.lancarRate}%</span>
+                      <span className="block text-2xl font-black text-[#0000FE]">{dashboardStats.lancarRate}%</span>
                       <span className="text-[10px] text-slate-400 font-medium font-sans">Kelancaran</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl space-y-2 text-xs text-emerald-800">
-                  <h5 className="font-bold text-emerald-900">Motivasi Hari Ini:</h5>
+                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl space-y-2 text-xs text-blue-800">
+                  <h5 className="font-bold text-blue-900">Motivasi Hari Ini:</h5>
                   <p className="italic leading-relaxed">
                     "Sebaik-baik kalian adalah orang yang belajar Al-Qur'an dan mengajarkannya." (HR. Bukhari)
                   </p>
-                  <p className="leading-relaxed pt-2 border-t border-emerald-100/30 text-[11px]">
+                  <p className="leading-relaxed pt-2 border-t border-blue-100/30 text-[11px]">
                     Tetap istiqomah dalam memelihara hafalanmu. Pastikan setiap bimbingan ustadz dicatat & dipelajari kembali dengan baik.
                   </p>
                 </div>
@@ -1105,7 +1113,7 @@ export default function App() {
                         Data Contoh
                       </span>
                     ) : (
-                      <span className="px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-[#0000FE] border border-blue-200">
                         Real-time Sheets
                       </span>
                     )}
@@ -1123,7 +1131,7 @@ export default function App() {
                   <input
                     id="search-students-input"
                     type="text"
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
                     placeholder="Cari nama / ID siswa..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1134,7 +1142,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-grade-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
                     value={gradeFilter}
                     onChange={(e) => setGradeFilter(e.target.value)}
                   >
@@ -1152,7 +1160,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-activity-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
                     value={kegiatanFilter}
                     onChange={(e) => setKegiatanFilter(e.target.value)}
                   >
@@ -1173,7 +1181,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-status-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
                   >
@@ -1226,12 +1234,12 @@ export default function App() {
                         <td className="py-3 px-4 font-semibold text-slate-600">{item.grade}</td>
                         <td className="py-3 px-4">
                           <div className="flex items-center space-x-2.5">
-                            <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-700 font-extrabold flex items-center justify-center border border-emerald-100 uppercase shrink-0 text-xs">
+                            <div className="w-8 h-8 rounded-full bg-blue-50 text-[#0000FE] font-extrabold flex items-center justify-center border border-blue-100 uppercase shrink-0 text-xs">
                               {item.nama.substring(0, 2)}
                             </div>
-                            <div className="font-bold text-slate-800 flex items-center gap-1 group-hover:text-emerald-700 transition-colors">
+                            <div className="font-bold text-slate-800 flex items-center gap-1 group-hover:text-[#0000FE] transition-colors">
                               {item.nama}
-                              <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-600 transition-opacity" />
+                              <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-[#0000FE] transition-opacity" />
                             </div>
                           </div>
                         </td>
@@ -1244,7 +1252,7 @@ export default function App() {
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             item.kegiatan === 'Ziyadah'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                              ? 'bg-blue-50 text-[#0000FE] border border-blue-100'
                               : item.kegiatan === 'Tahsin (Tilawah)'
                               ? 'bg-blue-50 text-blue-700 border border-blue-100'
                               : item.kegiatan === "Tahsin (IQRA')"
@@ -1266,7 +1274,7 @@ export default function App() {
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             item.status === 'Boleh Lanjut'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              ? 'bg-blue-50 text-[#0000FE] border border-blue-200'
                               : 'bg-rose-50 text-rose-700 border border-rose-200'
                           }`}>
                             {item.status}
@@ -1348,30 +1356,297 @@ export default function App() {
 
         </div>
         </>
-        ) : (
+        )}
+
+        {activeTab === 'statistik' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom duration-300">
             {/* Header info bar */}
-            <div className="bg-emerald-800 text-white rounded-3xl p-6 shadow-sm border border-emerald-700 relative overflow-hidden">
+            <div className="bg-[#0000FE] text-white rounded-3xl p-6 shadow-sm border border-blue-700 relative overflow-hidden">
               <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
               <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-extrabold flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5 text-emerald-300" />
+                    <TrendingUp className="w-5 h-5 text-blue-200" />
+                    Analisis & Statistik Hafalan Qur'an
+                  </h2>
+                  <p className="text-blue-50 text-xs mt-1 font-semibold">
+                    Visualisasi dinamika setoran, persentase kelancaran, tren mingguan, dan sebaran jenis pembelajaran Qur'an.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="bg-white/10 border border-white/20 px-4 py-2 rounded-2xl text-center min-w-[90px]">
+                    <span className="block text-2xl font-black">{dashboardStats.totalSetoran}</span>
+                    <span className="text-[10px] text-blue-100 font-bold uppercase tracking-wider">Total Setoran</span>
+                  </div>
+                  <div className="bg-white/10 border border-white/20 px-4 py-2 rounded-2xl text-center min-w-[90px]">
+                    <span className="block text-2xl font-black">{dashboardStats.lancarRate}%</span>
+                    <span className="text-[10px] text-blue-100 font-bold uppercase tracking-wider">Kelancaran</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Row specifically for statistical analysis */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 gap-2">
+                <div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Filter Analisis Statistik</h3>
+                  <p className="text-[11px] text-slate-400">Atur filter di bawah untuk menyesuaikan data grafik dan pencapaian secara interaktif</p>
+                </div>
+                
+                {/* Reset Filters button */}
+                {(searchQuery || gradeFilter !== 'All' || kegiatanFilter !== 'All' || statusFilter !== 'All') && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setGradeFilter('All');
+                      setKegiatanFilter('All');
+                      setStatusFilter('All');
+                    }}
+                    className="text-xs font-bold text-[#0000FE] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    Reset Semua Filter
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                {/* Search query input */}
+                <div className="sm:col-span-1 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Search className="w-4 h-4" />
+                  </span>
+                  <input
+                    id="search-stats-input"
+                    type="text"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
+                    placeholder="Cari nama / ID siswa..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+
+                {/* Grade filter */}
+                <div className="relative">
+                  <select
+                    id="filter-stats-grade-select"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    value={gradeFilter}
+                    onChange={(e) => setGradeFilter(e.target.value)}
+                  >
+                    <option value="All">Semua Grade</option>
+                    {uniqueGrades.filter(g => g !== 'All').map((g) => (
+                      <option key={`stats-grade-${g}`} value={g}>{g}</option>
+                    ))}
+                  </select>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                    <Filter className="w-3 h-3" />
+                  </span>
+                </div>
+
+                {/* Kegiatan Filter */}
+                <div className="relative">
+                  <select
+                    id="filter-stats-activity-select"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    value={kegiatanFilter}
+                    onChange={(e) => setKegiatanFilter(e.target.value)}
+                  >
+                    <option value="All">Semua Kegiatan</option>
+                    <option value="Ziyadah">Ziyadah</option>
+                    <option value="Tahsin (Tilawah)">Tahsin (Tilawah)</option>
+                    <option value="Tahsin (IQRA')">Tahsin (IQRA')</option>
+                    <option value="Tahsin (Qoidah)">Tahsin (Qoidah)</option>
+                    <option value="Murojaah">Murojaah</option>
+                    <option value="Tahsin">Semua Tahsin</option>
+                  </select>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                    <Filter className="w-3 h-3" />
+                  </span>
+                </div>
+
+                {/* Status Filter */}
+                <div className="relative">
+                  <select
+                    id="filter-stats-status-select"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="All">Semua Status</option>
+                    <option value="Boleh Lanjut">Boleh Lanjut</option>
+                    <option value="Ulangi">Ulangi</option>
+                  </select>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                    <Filter className="w-3 h-3" />
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Overview KPI widgets card row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <StatsCard
+                title="Total Setoran"
+                value={dashboardStats.totalSetoran}
+                description="Rekaman setoran terkumpul"
+                icon={<Hash className="w-5 h-5" />}
+                colorClass="text-blue-400"
+                bgColorClass="bg-slate-800"
+                theme="dark"
+              />
+              <StatsCard
+                title={currentUser.role === 'siswa' ? "Keaktifan Akun" : "Siswa Aktif"}
+                value={currentUser.role === 'siswa' ? "Aktif" : dashboardStats.totalSiswa}
+                description={currentUser.role === 'siswa' ? "Status keanggotaan aktif" : "Siswa terdaftar aktif"}
+                icon={<Users className="w-5 h-5" />}
+                colorClass="text-slate-600"
+                bgColorClass="bg-slate-100"
+                theme="white"
+              />
+              <StatsCard
+                title="Tingkat Kelancaran"
+                value={`${dashboardStats.lancarRate}%`}
+                description="Rata-rata status 'Boleh Lanjut'"
+                icon={<CheckCircle2 className="w-5 h-5" />}
+                colorClass="text-[#0000FE]"
+                bgColorClass="bg-blue-100"
+                theme="blue"
+              />
+            </div>
+
+            {/* Averages by activity card */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div>
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-[#0000FE]" /> Rata-Rata Setoran per Jenis Kegiatan
+                </h3>
+                <p className="text-[11px] text-slate-400">Rincian rata-rata baris atau halaman yang disetorkan berdasarkan kategori pembelajaran</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* 1. Ziyadah */}
+                <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Ziyadah</span>
+                    <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <h4 className="text-2xl font-black text-emerald-950">
+                      {dashboardStats.avgZiyadah} <span className="text-xs font-bold text-emerald-700">baris</span>
+                    </h4>
+                    <p className="text-[10px] text-emerald-600 font-semibold mt-1">
+                      {dashboardStats.ziyadahCount} setoran aktif
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2. Murojaah */}
+                <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Murojaah</span>
+                    <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <h4 className="text-2xl font-black text-amber-950">
+                      {dashboardStats.avgMurojaah} <span className="text-xs font-bold text-amber-700">hal</span>
+                    </h4>
+                    <p className="text-[10px] text-amber-600 font-semibold mt-1">
+                      {dashboardStats.murojaahCount} setoran aktif
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. Tahsin IQRA */}
+                <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Tahsin (IQRA')</span>
+                    <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                      <GraduationCap className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <h4 className="text-2xl font-black text-blue-950">
+                      {dashboardStats.avgTahsinIqra} <span className="text-xs font-bold text-blue-700">hal</span>
+                    </h4>
+                    <p className="text-[10px] text-blue-600 font-semibold mt-1">
+                      {dashboardStats.tahsinIqraCount} setoran aktif
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4. Tahsin Qoidah */}
+                <div className="bg-purple-50/50 border border-purple-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider">Tahsin (Qoidah)</span>
+                    <div className="p-2 bg-purple-100 text-purple-700 rounded-xl">
+                      <Award className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <h4 className="text-2xl font-black text-purple-950">
+                      {dashboardStats.avgTahsinQoidah} <span className="text-xs font-bold text-purple-700">hal</span>
+                    </h4>
+                    <p className="text-[10px] text-purple-600 font-semibold mt-1">
+                      {dashboardStats.tahsinQoidahCount} setoran aktif
+                    </p>
+                  </div>
+                </div>
+
+                {/* 5. Tahsin Tilawah */}
+                <div className="bg-rose-50/50 border border-rose-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Tahsin (Tilawah)</span>
+                    <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                      <Music className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <h4 className="text-2xl font-black text-rose-950">
+                      {dashboardStats.avgTahsinTilawah} <span className="text-xs font-bold text-rose-700">hal</span>
+                    </h4>
+                    <p className="text-[10px] text-rose-600 font-semibold mt-1">
+                      {dashboardStats.tahsinTilawahCount} setoran aktif
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Visual Analytics section */}
+            <StatsCharts data={filteredSetoran} />
+          </div>
+        )}
+
+        {activeTab === 'tugas' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom duration-300">
+            {/* Header info bar */}
+            <div className="bg-[#0000FE] text-white rounded-3xl p-6 shadow-sm border border-blue-700 relative overflow-hidden">
+              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
+              <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-blue-200" />
                     Daftar Tugas & Materi Harian
                   </h2>
-                  <p className="text-emerald-100 text-xs mt-1 font-medium">
+                  <p className="text-blue-50 text-xs mt-1 font-semibold">
                     Berisi instruksi, materi ziyadah, murojaah, dan pengumuman harian dari para ustadz.
                   </p>
                 </div>
                 
                 <div className="flex items-center gap-3">
-                  <div className="bg-emerald-900/40 border border-emerald-700/50 px-4 py-2 rounded-2xl text-center min-w-[90px]">
+                  <div className="bg-white/10 border border-white/20 px-4 py-2 rounded-2xl text-center min-w-[90px]">
                     <span className="block text-2xl font-black">{filteredTugasHarian.length}</span>
-                    <span className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Terfilter</span>
+                    <span className="text-[10px] text-blue-100 font-bold uppercase tracking-wider">Terfilter</span>
                   </div>
-                  <div className="bg-emerald-900/40 border border-emerald-700/50 px-4 py-2 rounded-2xl text-center min-w-[90px]">
+                  <div className="bg-white/10 border border-white/20 px-4 py-2 rounded-2xl text-center min-w-[90px]">
                     <span className="block text-2xl font-black">{tugasHarian.length}</span>
-                    <span className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Total</span>
+                    <span className="text-[10px] text-blue-100 font-bold uppercase tracking-wider">Total</span>
                   </div>
                 </div>
               </div>
@@ -1386,7 +1661,7 @@ export default function App() {
                   <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                       <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                        <Plus className="w-4 h-4 text-emerald-600" />
+                        <Plus className="w-4 h-4 text-[#0000FE]" />
                         {editingTugas ? 'Edit Tugas Harian' : 'Tambah Tugas Baru'}
                       </h3>
                       {editingTugas && (
@@ -1461,7 +1736,7 @@ export default function App() {
                         <input
                           type="date"
                           required
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-medium"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
                           value={tugasFormTanggal}
                           onChange={(e) => setTugasFormTanggal(e.target.value)}
                         />
@@ -1471,7 +1746,7 @@ export default function App() {
                       <div className="space-y-1">
                         <label className="block text-slate-500 font-bold">Untuk Kelas / Grade</label>
                         <select
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold appearance-none bg-white"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
                           value={tugasFormGrade}
                           onChange={(e) => setTugasFormGrade(e.target.value)}
                         >
@@ -1490,10 +1765,10 @@ export default function App() {
                       <div className="space-y-1">
                         <label className="block text-slate-500 font-bold flex items-center justify-between">
                           <span>Untuk Siswa Spesifik (Opsional)</span>
-                          <span className="text-[10px] text-emerald-600 font-black">Dari Spreadsheet</span>
+                          <span className="text-[10px] text-[#0000FE] font-black">Dari Spreadsheet</span>
                         </label>
                         <select
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold appearance-none bg-white"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
                           value={tugasFormSiswa}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -1519,12 +1794,12 @@ export default function App() {
                       <div className="space-y-1">
                         <label className="block text-slate-500 font-bold flex items-center justify-between">
                           <span>Tugas Ziyadah</span>
-                          <span className="text-[10px] text-emerald-600 font-black">Ziyadah</span>
+                          <span className="text-[10px] text-[#0000FE] font-black">Ziyadah</span>
                         </label>
                         <textarea
                           rows={2}
                           placeholder="Contoh: Juz 30 An-Naba' 1-15"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
                           value={tugasFormZiyadah}
                           onChange={(e) => setTugasFormZiyadah(e.target.value)}
                         />
@@ -1539,7 +1814,7 @@ export default function App() {
                         <textarea
                           rows={2}
                           placeholder="Contoh: Al-Mulk s/d Al-Qolam"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
                           value={tugasFormMurojaah}
                           onChange={(e) => setTugasFormMurojaah(e.target.value)}
                         />
@@ -1554,7 +1829,7 @@ export default function App() {
                         <textarea
                           rows={2}
                           placeholder="Contoh: Pelajari hukum tajwid nun sukun & tanwin"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-semibold"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
                           value={tugasFormTugasMateri}
                           onChange={(e) => setTugasFormTugasMateri(e.target.value)}
                         />
@@ -1566,7 +1841,7 @@ export default function App() {
                         <input
                           type="text"
                           placeholder={currentUser.nama}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 font-medium"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
                           value={tugasFormUstadz}
                           onChange={(e) => setTugasFormUstadz(e.target.value)}
                         />
@@ -1578,7 +1853,7 @@ export default function App() {
                         <textarea
                           rows={3}
                           placeholder="Catatan tambahan bagi siswa..."
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700"
                           value={tugasFormKeterangan}
                           onChange={(e) => setTugasFormKeterangan(e.target.value)}
                         />
@@ -1588,7 +1863,7 @@ export default function App() {
                       <button
                         type="submit"
                         disabled={isSubmittingTugas}
-                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 text-xs"
+                        className="w-full py-3 bg-[#0000FE] hover:bg-[#0000D0] text-white font-extrabold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 text-xs cursor-pointer"
                       >
                         {isSubmittingTugas ? (
                           <>
@@ -1608,16 +1883,16 @@ export default function App() {
                   // Student View Motivation & Instructions
                   <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-6">
                     <div className="border-b border-slate-100 pb-4 text-center">
-                      <div className="inline-flex bg-emerald-50 text-emerald-800 p-4 rounded-full mb-2 border-4 border-emerald-100">
-                        <ClipboardList className="w-8 h-8 text-emerald-600" />
+                      <div className="inline-flex bg-blue-50 text-blue-800 p-4 rounded-full mb-2 border-4 border-blue-100">
+                        <ClipboardList className="w-8 h-8 text-[#0000FE]" />
                       </div>
                       <h3 className="text-base font-extrabold text-slate-800">Tugas Harian Anda</h3>
                       <p className="text-xs text-slate-400 mt-1">Harap perhatikan & hafalkan materi harian di samping</p>
                     </div>
 
                     <div className="space-y-4 text-xs text-slate-600 leading-relaxed font-sans font-medium">
-                      <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl space-y-2 text-emerald-800">
-                        <h4 className="font-bold text-emerald-900 flex items-center gap-1">
+                      <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl space-y-2 text-blue-800">
+                        <h4 className="font-bold text-blue-900 flex items-center gap-1">
                           <Sparkles className="w-3.5 h-3.5" />
                           Tips Ziyadah Efektif:
                         </h4>
@@ -1642,7 +1917,7 @@ export default function App() {
                     </span>
                     <input
                       type="text"
-                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700"
+                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700"
                       placeholder="Cari materi / ustadz..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -1652,7 +1927,7 @@ export default function App() {
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     <div className="relative w-full sm:w-40">
                       <select
-                        className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-700 appearance-none cursor-pointer"
+                        className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 appearance-none cursor-pointer"
                         value={gradeFilter}
                         onChange={(e) => setGradeFilter(e.target.value)}
                       >
@@ -1684,13 +1959,13 @@ export default function App() {
                     filteredTugasHarian.map((t, idx) => (
                       <div
                         key={`tugas-${t.id || ''}-${idx}`}
-                        className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 hover:border-emerald-300 transition-all space-y-4 relative group"
+                        className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 hover:border-blue-300 transition-all space-y-4 relative group"
                       >
                         {/* Task Card Header */}
                         <div className="flex items-start justify-between">
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                              <span className="bg-blue-50 text-[#0000FE] border border-blue-100 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
                                 {t.grade === 'All' ? 'Semua Kelas' : `Kelas: ${t.grade}`}
                               </span>
                               {t.siswa && t.siswa !== 'All' && (
@@ -1710,7 +1985,7 @@ export default function App() {
                                   <div className="space-y-2.5 pt-2 border-t border-slate-100/50 mt-1">
                                     {parsed.ziyadah && (
                                       <div className="flex items-start gap-2">
-                                        <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider shrink-0 mt-0.5 border border-emerald-100">
+                                        <span className="bg-blue-50 text-[#0000FE] text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider shrink-0 mt-0.5 border border-blue-100">
                                           Ziyadah
                                         </span>
                                         <span className="text-xs text-slate-700 font-bold">{parsed.ziyadah}</span>
