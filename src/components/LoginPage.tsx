@@ -112,31 +112,31 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
   };
 
   return (
-    <div className="min-h-screen bg-[#070D19] flex font-sans overflow-hidden">
+    <div className="min-h-screen bg-slate-50 flex font-sans overflow-hidden text-slate-800">
       
       {/* LEFT SIDE: School Photo Backdrop (Visible on lg/xl screen sizes) */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-950 items-center justify-center overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 items-center justify-center overflow-hidden">
         {/* Full bleed school building image */}
         <img 
           src={alWildanBuilding} 
           alt="Al-Wildan School Building" 
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-70 transform hover:scale-105 transition-transform duration-10000 ease-out"
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-60 transform hover:scale-105 transition-transform duration-10000 ease-out"
         />
         
         {/* Sleek Gradient Overlay for maximum readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent"></div>
-        <div className="absolute inset-0 bg-emerald-950/20 mix-blend-multiply"></div>
-
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/70 to-transparent"></div>
+        <div className="absolute inset-0 bg-blue-950/20 mix-blend-multiply"></div>
+        
         {/* Floating welcome message */}
         <div className="relative z-10 p-12 max-w-lg space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-950/60 backdrop-blur-md shadow-md text-emerald-400">
-            <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-950/60 backdrop-blur-md shadow-md text-blue-400">
+            <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
             <span className="text-xs font-bold uppercase tracking-wider">Tahfizh Recap Online System</span>
           </div>
 
           <h1 className="text-4xl font-black tracking-tight text-white leading-tight">
             AL-WILDAN <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">
               INTERNATIONAL ISLAMIC SCHOOL 10
             </span>
           </h1>
@@ -147,11 +147,11 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
 
           <div className="pt-4 flex items-center gap-6 border-t border-slate-800/60 text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <ShieldCheck className="w-4 h-4 text-blue-400" />
               <span>Sistem Terenkripsi</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-teal-400" />
+              <BookOpen className="w-4 h-4 text-indigo-400" />
               <span>Kurikulum Internasional</span>
             </div>
           </div>
@@ -162,42 +162,42 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
       <div className="w-full lg:w-1/2 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-12 relative">
         
         {/* Subtle decorative layout gradients (for mobile fallback style) */}
-        <div className="absolute top-[-10%] right-[-10%] w-[350px] h-[350px] rounded-full bg-emerald-500/5 blur-[120px] pointer-events-none lg:hidden"></div>
-        <div className="absolute bottom-[-10%] left-[-10%] w-[350px] h-[350px] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none lg:hidden"></div>
+        <div className="absolute top-[-10%] right-[-10%] w-[350px] h-[350px] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none lg:hidden"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[350px] h-[350px] rounded-full bg-indigo-500/5 blur-[120px] pointer-events-none lg:hidden"></div>
         
         {/* Underlay of the photo building on mobile/tablet for atmospheric backdrop */}
-        <div className="absolute inset-0 bg-slate-950 opacity-40 mix-blend-overlay pointer-events-none lg:hidden">
+        <div className="absolute inset-0 bg-slate-100 opacity-20 mix-blend-overlay pointer-events-none lg:hidden">
           <img src={alWildanBuilding} alt="back" className="w-full h-full object-cover" />
         </div>
 
         <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center">
           {/* Circular Al-Wildan Logo Recreated Vectorially (No white background!) */}
           <div className="flex justify-center transition-all duration-300 transform hover:scale-105">
-            <AlWildanLogo size={140} className="filter drop-shadow-[0_8px_16px_rgba(16,185,129,0.2)]" />
+            <AlWildanLogo size={140} className="filter drop-shadow-[0_8px_16px_rgba(0,0,254,0.15)]" />
           </div>
           
-          <h2 className="mt-5 text-center text-2xl font-black tracking-tight text-white flex flex-col items-center gap-0.5">
-            <span className="text-slate-400 text-xs font-extrabold tracking-widest uppercase">PORTAL AKADEMIK</span>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-emerald-300 to-amber-300 font-black text-2xl tracking-wide uppercase">
+          <h2 className="mt-5 text-center text-2xl font-black tracking-tight text-slate-950 flex flex-col items-center gap-0.5">
+            <span className="text-slate-500 text-xs font-extrabold tracking-widest uppercase">PORTAL AKADEMIK</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0000FE] to-blue-600 font-black text-2xl tracking-wide uppercase">
               TAHFIZH RECAP SYSTEM
             </span>
           </h2>
           
-          <p className="mt-2 text-xs font-semibold text-slate-400 max-w-xs mx-auto lg:hidden">
+          <p className="mt-2 text-xs font-semibold text-slate-500 max-w-xs mx-auto lg:hidden">
             Al-Wildan International Islamic School 10 Jakarta
           </p>
         </div>
 
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-          <div className="bg-slate-900/70 backdrop-blur-xl border border-slate-800/80 py-8 px-6 shadow-2xl rounded-[32px] space-y-6 sm:px-10">
-            <div className="border-b border-slate-800/60 pb-4">
-              <h3 className="text-lg font-bold text-white tracking-wide">Masuk ke Sistem</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Silakan masukkan kredensial yang terdaftar di lembar Akun</p>
+          <div className="bg-white border border-slate-200/80 py-8 px-6 shadow-xl rounded-[32px] space-y-6 sm:px-10">
+            <div className="border-b border-slate-100 pb-4">
+              <h3 className="text-lg font-bold text-slate-900 tracking-wide">Masuk ke Sistem</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Silakan masukkan kredensial yang terdaftar di lembar Akun</p>
             </div>
 
             {errorMsg && (
-              <div id="login-error-alert" className="bg-rose-950/40 border border-rose-800/50 text-rose-300 p-3.5 rounded-2xl flex items-start gap-2.5 text-xs font-medium animate-shake">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+              <div id="login-error-alert" className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-2xl flex items-start gap-2.5 text-xs font-medium animate-shake">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
                 <span>{errorMsg}</span>
               </div>
             )}
@@ -205,11 +205,11 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
             <form className="space-y-5" onSubmit={handleLogin}>
               {/* ID Input */}
               <div className="space-y-1.5">
-                <label htmlFor="user-id-input" className="block text-xs font-bold text-slate-300 tracking-wider uppercase">
+                <label htmlFor="user-id-input" className="block text-xs font-bold text-slate-600 tracking-wider uppercase">
                   ID Pengguna (Siswa / Ustadz)
                 </label>
                 <div className="relative rounded-xl shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <User className="h-4 w-4" />
                   </div>
                   <input
@@ -221,18 +221,18 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
                     placeholder="Contoh: ustadz1 atau student_kean"
                     value={idInput}
                     onChange={(e) => setIdInput(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-3.5 text-sm border border-slate-800 rounded-xl bg-slate-950/40 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-slate-950/80 transition-all font-sans font-medium"
+                    className="block w-full pl-10 pr-3 py-3.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] focus:bg-white transition-all font-sans font-medium"
                   />
                 </div>
               </div>
 
               {/* Password Input */}
               <div className="space-y-1.5">
-                <label htmlFor="password-input" className="block text-xs font-bold text-slate-300 tracking-wider uppercase">
+                <label htmlFor="password-input" className="block text-xs font-bold text-slate-600 tracking-wider uppercase">
                   Kata Sandi (Password)
                 </label>
                 <div className="relative rounded-xl shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <KeyRound className="h-4 w-4" />
                   </div>
                   <input
@@ -243,13 +243,13 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
                     placeholder="Masukkan kata sandi Anda"
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
-                    className="block w-full pl-10 pr-10 py-3.5 text-sm border border-slate-800 rounded-xl bg-slate-950/40 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-slate-950/80 transition-all font-sans font-medium"
+                    className="block w-full pl-10 pr-10 py-3.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] focus:bg-white transition-all font-sans font-medium"
                   />
                   <button
                     type="button"
                     id="btn-toggle-password-visibility"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -264,9 +264,9 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
                   type="checkbox"
                   checked={showPassword}
                   onChange={(e) => setShowPassword(e.target.checked)}
-                  className="h-4 w-4 text-emerald-500 focus:ring-emerald-500/20 border-slate-800 bg-slate-950 rounded cursor-pointer"
+                  className="h-4 w-4 text-[#0000FE] focus:ring-[#0000FE]/20 border-slate-200 bg-slate-50 rounded cursor-pointer"
                 />
-                <label htmlFor="checkbox-show-password" className="ml-2 block text-xs font-semibold text-slate-400 hover:text-slate-200 cursor-pointer select-none transition-colors">
+                <label htmlFor="checkbox-show-password" className="ml-2 block text-xs font-semibold text-slate-500 hover:text-slate-700 cursor-pointer select-none transition-colors">
                   Perlihatkan password
                 </label>
               </div>
@@ -277,7 +277,7 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
                   type="submit"
                   id="btn-submit-login"
                   disabled={isLoading}
-                  className="w-full flex justify-center py-4 px-4 border border-transparent rounded-xl shadow-lg shadow-emerald-950/20 text-xs font-bold uppercase tracking-wider text-white bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 active:scale-98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-emerald-500 transition-all disabled:opacity-75 cursor-pointer"
+                  className="w-full flex justify-center py-4 px-4 border border-transparent rounded-xl shadow-md text-xs font-bold uppercase tracking-wider text-white bg-[#0000FE] hover:bg-[#0000D0] active:scale-98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white focus:ring-[#0000FE] transition-all disabled:opacity-75 cursor-pointer"
                 >
                   {isLoading ? (
                     <span className="flex items-center gap-1.5">
@@ -291,18 +291,18 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess }: Logi
             </form>
 
             {/* Account Source Indicator */}
-            <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-800/60 pt-4">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-100 pt-4">
               <span>Mode Sumber Data Akun:</span>
               {isFetchingAccounts ? (
-                <span className="flex items-center gap-1 text-emerald-400">
+                <span className="flex items-center gap-1 text-[#0000FE]">
                   <Loader2 className="w-3 h-3 animate-spin" /> Menghubungkan...
                 </span>
               ) : usingDemoData ? (
-                <span className="font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
+                <span className="font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
                   Akun Demo Lokal
                 </span>
               ) : (
-                <span className="font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                <span className="font-semibold text-[#0000FE] bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
                   Akun Google Sheets
                 </span>
               )}
