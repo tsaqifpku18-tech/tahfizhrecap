@@ -155,7 +155,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
               {studentHistory.map((item, idx) => (
                 <div
-                  key={idx}
+                  key={`student-history-${item.id || ''}-${idx}`}
                   id={`student-history-item-${idx}`}
                   className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex items-center justify-between text-xs hover:bg-slate-100 transition-colors"
                 >

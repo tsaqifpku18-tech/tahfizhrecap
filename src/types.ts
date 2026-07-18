@@ -48,3 +48,13 @@ export interface TugasHarian {
   siswa?: string;  // e.g. "Siswa A" or "All"
 }
 
+export interface CapaianTargetZiyadah {
+  id: string;
+  nama: string;
+  grade: string;
+  capaian: number;
+  target: number;
+  persentase?: number | null;
+}
+
+

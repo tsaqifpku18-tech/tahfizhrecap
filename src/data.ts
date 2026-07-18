@@ -1,4 +1,4 @@
-import { Setoran, UserAccount, TugasHarian } from './types';
+import { Setoran, UserAccount, TugasHarian, CapaianTargetZiyadah } from './types';
 
 export function getSatuanByKegiatan(kegiatan: string): string {
   const k = kegiatan.toLowerCase();
@@ -211,10 +211,33 @@ export const DEMO_TUGAS_HARIAN: TugasHarian[] = [
   }
 ];
 
+export const DEMO_CAPAIAN_TARGET_ZIYADAH: CapaianTargetZiyadah[] = [
+  { id: "c1", nama: "Kean", grade: "2 Inter 1", capaian: 240, target: 400 },
+  { id: "c2", nama: "Azzam", grade: "2 Inter 2", capaian: 180, target: 400 },
+  { id: "c3", nama: "Ahmad", grade: "2 Inter 1", capaian: 350, target: 400 },
+  { id: "c4", nama: "Fathir", grade: "2 Inter 2", capaian: 120, target: 400 },
+  { id: "c5", nama: "Zaid", grade: "2 Inter 1", capaian: 290, target: 400 },
+  { id: "c6", nama: "Rania", grade: "2 Inter 2", capaian: 310, target: 400 },
+  { id: "c7", nama: "Salma", grade: "2 Inter 2", capaian: 380, target: 400 },
+  { id: "c8", nama: "Yusuf", grade: "2 Inter 1", capaian: 220, target: 400 },
+];
+
 export const GOOGLE_APPS_SCRIPT_CODE = `/**
  * Google Apps Script untuk Dashboard Penilaian Tahfizh & Sistem Login
  * Tempatkan kode ini di Google Sheets -> Ekstensi (Extensions) -> Apps Script
  */
+
+// Helper untuk menormalisasi ID (menghapus format .0 dari Google Sheets agar cocok sempurna)
+function normalizeId(idStr) {
+  var s = String(idStr !== undefined && idStr !== null ? idStr : "").trim();
+  if (s.indexOf('.') !== -1 && !isNaN(Number(s))) {
+    var parts = s.split('.');
+    if (parts[1] === '0') {
+      return parts[0];
+    }
+  }
+  return s;
+}
 
 // Menangani permintaan GET: Mengambil data dari Sheet untuk ditampilkan di Dashboard
 function doGet(e) {
@@ -259,7 +282,7 @@ function doGet(e) {
       var row = data[i];
       if (!row[idIdx]) continue;
       accounts.push({
-        id: String(row[idIdx]).trim(),
+        id: normalizeId(row[idIdx]),
         nama: String(row[namaaIdx] !== undefined ? row[namaaIdx] : "").trim(),
         password: String(row[passIdx] !== undefined ? row[passIdx] : "").trim()
       });
@@ -323,7 +346,7 @@ function doGet(e) {
           }
           
           tasks.push({
-            id: idIdx !== -1 ? String(row[idIdx] !== undefined ? row[idIdx] : "").trim() : "T" + i,
+            id: idIdx !== -1 ? normalizeId(row[idIdx] !== undefined ? row[idIdx] : "") : "T" + i,
             tanggal: formattedDate,
             grade: gradeIdx !== -1 ? String(row[gradeIdx] !== undefined ? row[gradeIdx] : "").trim() : "All",
             materi: finalMateri,
@@ -382,7 +405,7 @@ function doGet(e) {
             });
             
             tasks.push({
-              id: "penilaian_tugas_" + (pIdIdx !== -1 ? String(row[pIdIdx]).trim() : i),
+              id: "penilaian_tugas_" + (pIdIdx !== -1 ? normalizeId(row[pIdIdx]) : i),
               tanggal: formattedDate,
               grade: pGradeIdx !== -1 ? String(row[pGradeIdx]).trim() : "All",
               materi: finalMateri,
@@ -396,6 +419,109 @@ function doGet(e) {
     }
     
     return createJsonResponse({ status: "success", data: tasks });
+  }
+
+  // JIKA PERMINTAAN DATA CAPAIAN TARGET ZIYADAH
+  if (tabParam === "capaian_ziyadah" || tabParam === "capaian_target" || tabParam === "target_ziyadah" || tabParam === "capaiantargetziyadah") {
+    var sheetCapaian = ss.getSheetByName("Capaian Target Ziyadah") || ss.getSheetByName("capaian_target_ziyadah") || ss.getSheetByName("Capaian Target") || ss.getSheetByName("capaian") || ss.getSheetByName("target");
+    if (!sheetCapaian) {
+      return createJsonResponse({ status: "success", data: [] });
+    }
+    var dataCapaian = sheetCapaian.getDataRange().getValues();
+    if (dataCapaian.length <= 1) {
+      return createJsonResponse({ status: "success", data: [] });
+    }
+    
+    var headersCapaian = dataCapaian[0];
+    var cNamaIdx = -1;
+    var cGradeIdx = -1;
+    var cCapaianIdx = -1;
+    var cTargetIdx = -1;
+    var cPersenIdx = -1;
+    
+    // First, look for exact matches to avoid partial matching conflicts (e.g. "Capaian" matching "Persentase Kecapaian")
+    for (var h = 0; h < headersCapaian.length; h++) {
+      var headerStr = String(headersCapaian[h]).toLowerCase().trim();
+      if (headerStr === "nama" || headerStr === "nama siswa" || headerStr === "siswa") {
+        cNamaIdx = h;
+      } else if (headerStr === "grade" || headerStr === "kelas" || headerStr === "grade/kelas") {
+        cGradeIdx = h;
+      } else if (headerStr === "capaian") {
+        cCapaianIdx = h;
+      } else if (headerStr === "target") {
+        cTargetIdx = h;
+      } else if (headerStr === "persentase" || headerStr === "persen" || headerStr === "percentage") {
+        cPersenIdx = h;
+      }
+    }
+    
+    // Looser fallback matching for incomplete or combined headers
+    for (var h = 0; h < headersCapaian.length; h++) {
+      var headerStr = String(headersCapaian[h]).toLowerCase().trim();
+      
+      if (cPersenIdx === -1) {
+        if (headerStr.indexOf("persen") !== -1 || headerStr.indexOf("percentage") !== -1 || headerStr.indexOf("kecapaian") !== -1) {
+          cPersenIdx = h;
+          continue;
+        }
+      }
+      
+      if (cTargetIdx === -1) {
+        if (headerStr.indexOf("target") !== -1) {
+          if (headerStr.indexOf("persen") === -1 && headerStr.indexOf("kecapaian") === -1) {
+            cTargetIdx = h;
+            continue;
+          }
+        }
+      }
+
+      if (cCapaianIdx === -1) {
+        if (headerStr.indexOf("capaian") !== -1) {
+          if (headerStr.indexOf("persen") === -1 && headerStr.indexOf("kecapaian") === -1) {
+            cCapaianIdx = h;
+            continue;
+          }
+        }
+      }
+    }
+    
+    if (cNamaIdx === -1) cNamaIdx = 0;
+    if (cGradeIdx === -1) cGradeIdx = 1;
+    if (cCapaianIdx === -1) cCapaianIdx = 2;
+    if (cTargetIdx === -1) {
+      for (var h = 0; h < headersCapaian.length; h++) {
+        if (h !== cNamaIdx && h !== cGradeIdx && h !== cCapaianIdx && h !== cPersenIdx) {
+          cTargetIdx = h;
+          break;
+        }
+      }
+      if (cTargetIdx === -1) cTargetIdx = 3;
+    }
+    
+    var capaianList = [];
+    for (var i = 1; i < dataCapaian.length; i++) {
+      var row = dataCapaian[i];
+      if (row.length === 0 || !row[cNamaIdx]) continue;
+      
+      var rawPersen = cPersenIdx !== -1 ? row[cPersenIdx] : null;
+      var persenVal = null;
+      if (rawPersen !== null && rawPersen !== "") {
+        var pNum = Number(rawPersen);
+        if (!isNaN(pNum)) {
+          persenVal = pNum <= 1.5 ? Math.round(pNum * 100) : Math.round(pNum);
+        }
+      }
+
+      capaianList.push({
+        id: "C" + i,
+        nama: String(row[cNamaIdx] !== undefined ? row[cNamaIdx] : "").trim(),
+        grade: cGradeIdx !== -1 ? String(row[cGradeIdx] !== undefined ? row[cGradeIdx] : "").trim() : "",
+        capaian: cCapaianIdx !== -1 ? Number(row[cCapaianIdx] || 0) : 0,
+        target: cTargetIdx !== -1 ? Number(row[cTargetIdx] || 0) : 0,
+        persentase: persenVal
+      });
+    }
+    return createJsonResponse({ status: "success", data: capaianList });
   }
 
   // JIKA PERMINTAAN DATA SETORAN (DEFAULT)
@@ -473,7 +599,7 @@ function doGet(e) {
     }
     
     rows.push({
-      id: String(row[idIdx] !== undefined ? row[idIdx] : "").trim(),
+      id: normalizeId(row[idIdx] !== undefined ? row[idIdx] : ""),
       grade: String(row[gradeIdx] !== undefined ? row[gradeIdx] : "").trim(),
       nama: String(row[namaIdx] !== undefined ? row[namaIdx] : "").trim(),
       tanggalSetoran: formattedDate,
@@ -491,6 +617,31 @@ function doGet(e) {
   
   // Mengembalikan data ke React Dashboard
   return createJsonResponse({ status: "success", data: rows });
+}
+
+// Helper untuk mencari baris berdasarkan ID secara dinamis
+function findRowById(sheet, idToFind) {
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return -1;
+  var headers = data[0];
+  var idIdx = -1;
+  for (var h = 0; h < headers.length; h++) {
+    if (String(headers[h]).toLowerCase().trim() === "id") {
+      idIdx = h;
+      break;
+    }
+  }
+  if (idIdx === -1) idIdx = 0;
+  
+  var normalizedIdToFind = normalizeId(idToFind);
+  for (var i = 1; i < data.length; i++) {
+    var cellVal = data[i][idIdx];
+    var normalizedCellVal = normalizeId(cellVal);
+    if (normalizedCellVal === normalizedIdToFind) {
+      return i + 1;
+    }
+  }
+  return -1;
 }
 
 // Menangani permintaan POST: Menambah (create), Mengedit (edit), atau Menghapus (delete) data penilaian/tugas dari Dashboard ke Google Sheets
@@ -614,16 +765,57 @@ function doPost(e) {
         sheet.appendRow(rowData);
         return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil ditambahkan." });
       } else if (action === "edit") {
-        var data = sheet.getDataRange().getValues();
         var idToFind = String(postData.id || "").trim();
-        var foundRow = -1;
-        for (var i = 1; i < data.length; i++) {
-          if (String(data[i][0]).trim() === idToFind) {
-            foundRow = i + 1;
-            break;
+        if (idToFind.indexOf("penilaian_tugas_") === 0) {
+          var realId = idToFind.substring("penilaian_tugas_".length);
+          var sheetPenilaian = ss.getSheetByName("Penilaian") || ss.getSheetByName("penilaian") || ss.getSheets()[0];
+          if (sheetPenilaian) {
+            var foundRowP = findRowById(sheetPenilaian, realId);
+            if (foundRowP !== -1) {
+              var dataP = sheetPenilaian.getDataRange().getValues();
+              var headersP = dataP[0];
+              var pTugasZiyadahIdx = -1, pTugasMurojaahIdx = -1, pTugasMateriIdx = -1;
+              for (var h = 0; h < headersP.length; h++) {
+                var headerStr = String(headersP[h]).toLowerCase().trim();
+                if (headerStr.indexOf("tugas ziyadah") !== -1 || headerStr === "ziyadah") pTugasZiyadahIdx = h;
+                else if (headerStr.indexOf("tugas murojaah") !== -1 || headerStr === "murojaah") pTugasMurojaahIdx = h;
+                else if (headerStr === "tugas materi" || headerStr === "tugas_materi") pTugasMateriIdx = h;
+              }
+              
+              var zVal = "";
+              var mVal = "";
+              var tmVal = "";
+              if (postData.materi) {
+                try {
+                  var parsed = JSON.parse(postData.materi);
+                  if (parsed && typeof parsed === 'object') {
+                    zVal = String(parsed.ziyadah || "").trim();
+                    mVal = String(parsed.murojaah || "").trim();
+                    tmVal = String(parsed.tugasMateri || parsed.materi || "").trim();
+                  } else {
+                    tmVal = String(postData.materi).trim();
+                  }
+                } catch(e) {
+                  tmVal = String(postData.materi).trim();
+                }
+              }
+              if (postData.ziyadah) zVal = String(postData.ziyadah).trim();
+              if (postData.murojaah) mVal = String(postData.murojaah).trim();
+              if (postData.tugasMateri) tmVal = String(postData.tugasMateri).trim();
+              
+              if (pTugasZiyadahIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasZiyadahIdx + 1).setValue(zVal);
+              if (pTugasMurojaahIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasMurojaahIdx + 1).setValue(mVal);
+              if (pTugasMateriIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasMateriIdx + 1).setValue(tmVal);
+              
+              return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil diperbarui." });
+            }
           }
+          return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
         }
+
+        var foundRow = findRowById(sheet, idToFind);
         if (foundRow !== -1) {
+          var data = sheet.getDataRange().getValues();
           var headers = data[0];
           
           var standardTugasHeaders = ["ID", "Tanggal", "Grade", "Tugas Ziyadah", "Tugas Murojaah", "Tugas Materi", "Ustadz", "Keterangan", "Siswa"];
@@ -719,15 +911,33 @@ function doPost(e) {
           return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
         }
       } else if (action === "delete") {
-        var data = sheet.getDataRange().getValues();
         var idToFind = String(postData.id || "").trim();
-        var foundRow = -1;
-        for (var i = 1; i < data.length; i++) {
-          if (String(data[i][0]).trim() === idToFind) {
-            foundRow = i + 1;
-            break;
+        if (idToFind.indexOf("penilaian_tugas_") === 0) {
+          var realId = idToFind.substring("penilaian_tugas_".length);
+          var sheetPenilaian = ss.getSheetByName("Penilaian") || ss.getSheetByName("penilaian") || ss.getSheets()[0];
+          if (sheetPenilaian) {
+            var foundRowP = findRowById(sheetPenilaian, realId);
+            if (foundRowP !== -1) {
+              var dataP = sheetPenilaian.getDataRange().getValues();
+              var headersP = dataP[0];
+              var pTugasZiyadahIdx = -1, pTugasMurojaahIdx = -1, pTugasMateriIdx = -1;
+              for (var h = 0; h < headersP.length; h++) {
+                var headerStr = String(headersP[h]).toLowerCase().trim();
+                if (headerStr.indexOf("tugas ziyadah") !== -1 || headerStr === "ziyadah") pTugasZiyadahIdx = h;
+                else if (headerStr.indexOf("tugas murojaah") !== -1 || headerStr === "murojaah") pTugasMurojaahIdx = h;
+                else if (headerStr === "tugas materi" || headerStr === "tugas_materi") pTugasMateriIdx = h;
+              }
+              if (pTugasZiyadahIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasZiyadahIdx + 1).setValue("");
+              if (pTugasMurojaahIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasMurojaahIdx + 1).setValue("");
+              if (pTugasMateriIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasMateriIdx + 1).setValue("");
+              
+              return createJsonResponse({ status: "success", message: "Tugas harian berhasil dihapus." });
+            }
           }
+          return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
         }
+
+        var foundRow = findRowById(sheet, idToFind);
         if (foundRow !== -1) {
           sheet.deleteRow(foundRow);
           return createJsonResponse({ status: "success", message: "Tugas harian berhasil dihapus." });
@@ -841,16 +1051,8 @@ function doPost(e) {
         message: "Alhamdulillah, data penilaian berhasil disimpan ke Google Sheets." 
       });
     } else if (action === "edit") {
-      var data = sheet.getDataRange().getValues();
       var idToFind = String(postData.id || "").trim();
-      var foundRow = -1;
-      
-      for (var i = 1; i < data.length; i++) {
-        if (String(data[i][0]).trim() === idToFind) {
-          foundRow = i + 1; // baris di Sheets dimulai dari 1
-          break;
-        }
-      }
+      var foundRow = findRowById(sheet, idToFind);
       
       if (foundRow === -1) {
         // Pencarian alternatif: nama siswa
@@ -902,16 +1104,8 @@ function doPost(e) {
         });
       }
     } else if (action === "delete") {
-      var data = sheet.getDataRange().getValues();
       var idToFind = String(postData.id || "").trim();
-      var foundRow = -1;
-      
-      for (var i = 1; i < data.length; i++) {
-        if (String(data[i][0]).trim() === idToFind) {
-          foundRow = i + 1;
-          break;
-        }
-      }
+      var foundRow = findRowById(sheet, idToFind);
       
       if (foundRow !== -1) {
         sheet.deleteRow(foundRow);

@@ -26,10 +26,13 @@ import {
   TrendingUp,
   Award,
   GraduationCap,
-  Music
+  Music,
+  Undo2,
+  Target,
+  Trophy
 } from 'lucide-react';
-import { Setoran, Settings, UserSession, TugasHarian } from './types';
-import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE } from './data';
+import { Setoran, Settings, UserSession, TugasHarian, CapaianTargetZiyadah } from './types';
+import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH } from './data';
 import { StatsCard } from './components/StatsCard';
 import { NewAssessmentForm } from './components/NewAssessmentForm';
 import { StudentDetailModal } from './components/StudentDetailModal';
@@ -179,7 +182,8 @@ export default function App() {
   // 1. Core States
   const [setoran, setSetoran] = useState<Setoran[]>(DEMO_SETORAN);
   const [tugasHarian, setTugasHarian] = useState<TugasHarian[]>(DEMO_TUGAS_HARIAN);
-  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik'>('rekap');
+  const [capaianZiyadah, setCapaianZiyadah] = useState<CapaianTargetZiyadah[]>(DEMO_CAPAIAN_TARGET_ZIYADAH);
+  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik' | 'capaian_ziyadah'>('rekap');
   const [editingTugas, setEditingTugas] = useState<TugasHarian | null>(null);
   const [isSubmittingTugas, setIsSubmittingTugas] = useState<boolean>(false);
   const [confirmDeleteTugas, setConfirmDeleteTugas] = useState<TugasHarian | null>(null);
@@ -206,6 +210,15 @@ export default function App() {
   const [confirmDeleteRecord, setConfirmDeleteRecord] = useState<Setoran | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
+  // Undo States
+  const [lastAction, setLastAction] = useState<{
+    type: 'add' | 'edit' | 'delete';
+    data: Setoran;
+    prevData?: Setoran;
+  } | null>(null);
+  const [isUndoing, setIsUndoing] = useState<boolean>(false);
+  const [showUndoToast, setShowUndoToast] = useState<boolean>(false);
+
   // Session State (Loaded from localStorage)
   const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
     const savedSession = localStorage.getItem('tahfizh_user_session');
@@ -230,7 +243,7 @@ export default function App() {
   };
 
   // Default Google Apps Script URL set by the developer
-  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwK0a1doiZQ2LA4MimqLdgdNO_bifCyOBkSQDfIAZSluRLyG_beHXp6e_AY_EHHGM28/exec';
+  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxKLiG5gthvAB4oHzqpxIL0nkL57NejzsM9iTUwtjcYF_o1cYN_xIAmN9krRFcdhLuM/exec';
 
   // Settings state (Loaded from localStorage with fallback to default Apps Script URL)
   const [settings, setSettings] = useState<Settings>(() => {
@@ -260,6 +273,11 @@ export default function App() {
   const [gradeFilter, setGradeFilter] = useState<string>('All');
   const [kegiatanFilter, setKegiatanFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+
+  // Capaian Ziyadah Target States
+  const [capaianSearch, setCapaianSearch] = useState<string>('');
+  const [capaianGradeFilter, setCapaianGradeFilter] = useState<string>('All');
+  const [capaianSortBy, setCapaianSortBy] = useState<'name' | 'percentage_desc' | 'percentage_asc'>('percentage_desc');
   
   // Table Pagination
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -274,6 +292,79 @@ export default function App() {
     const grades = sourceData.map((s) => s.grade).filter(Boolean);
     return ['All', ...Array.from(new Set(grades))];
   }, [setoran, currentUser]);
+
+  const uniqueCapaianGrades = useMemo(() => {
+    const grades = capaianZiyadah.map((c) => c.grade).filter(Boolean);
+    return ['All', ...Array.from(new Set(grades))];
+  }, [capaianZiyadah]);
+
+  const processedCapaianList = useMemo(() => {
+    let list = capaianZiyadah;
+    
+    // If the logged in user is a student (role: 'siswa'), filter only their own data
+    if (currentUser && currentUser.role === 'siswa') {
+      list = list.filter((item) => isStudentNameMatched(item.nama, currentUser.nama));
+    }
+    
+    // If user filtered by grade:
+    if (capaianGradeFilter !== 'All') {
+      list = list.filter((item) => item.grade === capaianGradeFilter);
+    }
+    
+    // If user searched for name:
+    if (capaianSearch.trim() !== '') {
+      const query = capaianSearch.toLowerCase();
+      list = list.filter((item) => item.nama.toLowerCase().includes(query));
+    }
+    
+    // Sort
+    return [...list].sort((a, b) => {
+      const pctA = a.persentase !== undefined && a.persentase !== null
+        ? a.persentase / 100
+        : (a.target > 0 ? (a.capaian / a.target) : 0);
+      const pctB = b.persentase !== undefined && b.persentase !== null
+        ? b.persentase / 100
+        : (b.target > 0 ? (b.capaian / b.target) : 0);
+      
+      if (capaianSortBy === 'name') {
+        return a.nama.localeCompare(b.nama);
+      } else if (capaianSortBy === 'percentage_desc') {
+        return pctB - pctA;
+      } else if (capaianSortBy === 'percentage_asc') {
+        return pctA - pctB;
+      }
+      return 0;
+    });
+  }, [capaianZiyadah, capaianGradeFilter, capaianSearch, capaianSortBy, currentUser]);
+
+  const capaianStats = useMemo(() => {
+    const list = currentUser && currentUser.role === 'siswa'
+      ? capaianZiyadah.filter((item) => isStudentNameMatched(item.nama, currentUser.nama))
+      : capaianZiyadah;
+
+    const total = list.length;
+    if (total === 0) return { total: 0, avgPercentage: 0, reachedTarget: 0, highestPct: 0 };
+    
+    let sumPct = 0;
+    let reached = 0;
+    let maxPct = 0;
+    
+    list.forEach((item) => {
+      const pct = item.persentase !== undefined && item.persentase !== null
+        ? item.persentase
+        : (item.target > 0 ? (item.capaian / item.target) * 100 : 0);
+      sumPct += pct;
+      if (pct >= 100) reached++;
+      if (pct > maxPct) maxPct = pct;
+    });
+    
+    return {
+      total,
+      avgPercentage: Math.round(sumPct / total),
+      reachedTarget: reached,
+      highestPct: Math.round(maxPct),
+    };
+  }, [capaianZiyadah, currentUser]);
 
   // Fetch Tugas Harian data from Google Apps Script Web App
   const fetchTugasHarian = async (url: string): Promise<void> => {
@@ -299,6 +390,29 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to fetch Tugas Harian:', err);
+    }
+  };
+
+  // Fetch Capaian Target Ziyadah data from Google Apps Script Web App
+  const fetchCapaianZiyadah = async (url: string): Promise<void> => {
+    if (!url) return;
+    try {
+      const separator = url.includes('?') ? '&' : '?';
+      const response = await fetch(`${url}${separator}tab=capaian_ziyadah`, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      if (response.ok) {
+        const res = await response.json();
+        if (res && res.status === 'success' && Array.isArray(res.data)) {
+          setCapaianZiyadah(res.data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch Capaian Target Ziyadah:', err);
     }
   };
 
@@ -334,6 +448,7 @@ export default function App() {
         
         setSetoran(sortedData);
         await fetchTugasHarian(url);
+        await fetchCapaianZiyadah(url);
         setConnectionStatus('connected');
         setUsingDemoData(false);
         return true;
@@ -370,6 +485,8 @@ export default function App() {
       }
     } else {
       setSetoran(DEMO_SETORAN);
+      setTugasHarian(DEMO_TUGAS_HARIAN);
+      setCapaianZiyadah(DEMO_CAPAIAN_TARGET_ZIYADAH);
       setUsingDemoData(true);
       setConnectionStatus('disconnected');
     }
@@ -384,6 +501,7 @@ export default function App() {
       // Trigger a state reload
       setSetoran((prev) => [...prev]);
       setTugasHarian((prev) => [...prev]);
+      setCapaianZiyadah((prev) => [...prev]);
     } else {
       await fetchDataFromSheets(settings.appsScriptUrl);
     }
@@ -394,6 +512,7 @@ export default function App() {
   const handleUseDemoData = () => {
     setSetoran(DEMO_SETORAN);
     setTugasHarian(DEMO_TUGAS_HARIAN);
+    setCapaianZiyadah(DEMO_CAPAIAN_TARGET_ZIYADAH);
     setUsingDemoData(true);
     setConnectionStatus('disconnected');
     setErrorMessage('');
@@ -414,6 +533,11 @@ export default function App() {
       // Offline Demo Mode: Append locally in memory
       setSetoran((prev) => [recordWithId, ...prev]);
       setIsSubmitting(false);
+      setLastAction({
+        type: 'add',
+        data: recordWithId,
+      });
+      setShowUndoToast(true);
       return true;
     }
 
@@ -436,6 +560,11 @@ export default function App() {
         // Refresh dashboard statistics from Google Sheets
         await fetchDataFromSheets(settings.appsScriptUrl);
         setIsSubmitting(false);
+        setLastAction({
+          type: 'add',
+          data: recordWithId,
+        });
+        setShowUndoToast(true);
         return true;
       } else {
         throw new Error(res.message || 'Gagal menyimpan data.');
@@ -450,12 +579,21 @@ export default function App() {
   // Update existing assessment
   const handleUpdateSetoran = async (updatedRecord: Setoran): Promise<boolean> => {
     setIsSubmitting(true);
+    const originalRecord = setoran.find((s) => s.id === updatedRecord.id);
     
     if (usingDemoData || !settings.appsScriptUrl) {
       // Offline Demo Mode: Update locally in memory
       setSetoran((prev) => prev.map((s) => s.id === updatedRecord.id ? updatedRecord : s));
       setIsSubmitting(false);
       setEditingSetoran(null);
+      if (originalRecord) {
+        setLastAction({
+          type: 'edit',
+          data: updatedRecord,
+          prevData: originalRecord,
+        });
+        setShowUndoToast(true);
+      }
       return true;
     }
 
@@ -480,6 +618,14 @@ export default function App() {
         await fetchDataFromSheets(settings.appsScriptUrl);
         setIsSubmitting(false);
         setEditingSetoran(null);
+        if (originalRecord) {
+          setLastAction({
+            type: 'edit',
+            data: updatedRecord,
+            prevData: originalRecord,
+          });
+          setShowUndoToast(true);
+        }
         return true;
       } else {
         throw new Error(res.message || 'Gagal memperbarui data.');
@@ -493,7 +639,7 @@ export default function App() {
 
   // Delete assessment
   const handleDeleteSetoran = async (recordToDelete: Setoran): Promise<boolean> => {
-    if (!currentUser || !(currentUser.nama || '').toLowerCase().includes('ustadz')) {
+    if (!currentUser || currentUser.role !== 'ustadz') {
       console.error('Unauthorized deletion attempt.');
       return false;
     }
@@ -504,6 +650,11 @@ export default function App() {
       if (editingSetoran?.id === recordToDelete.id) {
         setEditingSetoran(null);
       }
+      setLastAction({
+        type: 'delete',
+        data: recordToDelete,
+      });
+      setShowUndoToast(true);
       return true;
     }
 
@@ -529,6 +680,11 @@ export default function App() {
         if (editingSetoran?.id === recordToDelete.id) {
           setEditingSetoran(null);
         }
+        setLastAction({
+          type: 'delete',
+          data: recordToDelete,
+        });
+        setShowUndoToast(true);
         return true;
       } else {
         throw new Error(res.message || 'Gagal menghapus data.');
@@ -537,6 +693,104 @@ export default function App() {
       console.error('Error deleting assessment:', err);
       return false;
     }
+  };
+
+  // Handle Undo (Urungkan)
+  const handleUndo = async (): Promise<boolean> => {
+    if (!lastAction || isUndoing) return false;
+    setIsUndoing(true);
+    
+    const { type, data, prevData } = lastAction;
+    let success = false;
+    
+    try {
+      if (type === 'add') {
+        // Undo an "add" action by deleting the newly created record
+        if (usingDemoData || !settings.appsScriptUrl) {
+          setSetoran((prev) => prev.filter((s) => s.id !== data.id));
+          success = true;
+        } else {
+          const response = await fetch(settings.appsScriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            redirect: 'follow',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify({
+              id: data.id,
+              action: 'delete'
+            }),
+          });
+          const res = await response.json();
+          if (res && res.status === 'success') {
+            await fetchDataFromSheets(settings.appsScriptUrl);
+            success = true;
+          } else {
+            throw new Error(res.message || 'Gagal membatalkan penambahan.');
+          }
+        }
+      } else if (type === 'edit' && prevData) {
+        // Undo an "edit" action by writing the original data back
+        if (usingDemoData || !settings.appsScriptUrl) {
+          setSetoran((prev) => prev.map((s) => s.id === prevData.id ? prevData : s));
+          success = true;
+        } else {
+          const response = await fetch(settings.appsScriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            redirect: 'follow',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify({
+              ...prevData,
+              action: 'edit'
+            }),
+          });
+          const res = await response.json();
+          if (res && res.status === 'success') {
+            await fetchDataFromSheets(settings.appsScriptUrl);
+            success = true;
+          } else {
+            throw new Error(res.message || 'Gagal membatalkan pembaruan.');
+          }
+        }
+      } else if (type === 'delete') {
+        // Undo a "delete" action by re-adding the deleted record
+        if (usingDemoData || !settings.appsScriptUrl) {
+          setSetoran((prev) => [data, ...prev]);
+          success = true;
+        } else {
+          const response = await fetch(settings.appsScriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            redirect: 'follow',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify(data), // Save record normally
+          });
+          const res = await response.json();
+          if (res && res.status === 'success') {
+            await fetchDataFromSheets(settings.appsScriptUrl);
+            success = true;
+          } else {
+            throw new Error(res.message || 'Gagal membatalkan penghapusan.');
+          }
+        }
+      }
+      
+      if (success) {
+        setLastAction(null);
+        setShowUndoToast(false);
+      }
+    } catch (err) {
+      console.error('Error executing undo:', err);
+    } finally {
+      setIsUndoing(false);
+    }
+    return success;
   };
 
   // Add new Tugas Harian
@@ -627,7 +881,7 @@ export default function App() {
 
   // Delete Tugas Harian
   const handleDeleteTugas = async (tugasToDelete: TugasHarian): Promise<boolean> => {
-    if (!currentUser || !(currentUser.nama || '').toLowerCase().includes('ustadz')) {
+    if (!currentUser || currentUser.role !== 'ustadz') {
       console.error('Unauthorized deletion attempt.');
       return false;
     }
@@ -869,7 +1123,7 @@ export default function App() {
                 </span>
               </div>
               <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white drop-shadow-sm">
-                Dashboard Tahfizh Recap 2 INTER 3
+                Dashboard Tahfizh Recap
               </h1>
               <p className="text-blue-50 text-xs sm:text-sm font-semibold max-w-2xl">
                 Sistem rekapitulasi evaluasi setoran hafalan (Tahsin & Ziyadah) terintegrasi langsung dengan Google Sheets.
@@ -951,6 +1205,18 @@ export default function App() {
             >
               <TrendingUp className="w-4 h-4" />
               Statistik & Grafik
+            </button>
+            <button
+              id="tab-capaian-ziyadah-btn"
+              onClick={() => setActiveTab('capaian_ziyadah')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'capaian_ziyadah'
+                  ? 'bg-[#0000FE] text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Award className="w-4 h-4" />
+              Capaian Target Ziyadah
             </button>
           </div>
           
@@ -1094,6 +1360,23 @@ export default function App() {
 
                 {/* Action Controls & Display Mode Indicator */}
                 <div className="flex items-center gap-2.5 self-start sm:self-center">
+                  {/* Undo Button for Ustadz */}
+                  {currentUser && currentUser.role === 'ustadz' && lastAction && (
+                    <button
+                      id="btn-undo-header"
+                      onClick={handleUndo}
+                      disabled={isUndoing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 rounded-xl text-xs font-bold text-rose-700 transition-all shadow-xs disabled:opacity-50 animate-pulse cursor-pointer"
+                      title={`Urungkan aksi terakhir: ${
+                        lastAction.type === 'add' ? 'Tambah Penilaian' : 
+                        lastAction.type === 'edit' ? 'Ubah Penilaian' : 'Hapus Penilaian'
+                      }`}
+                    >
+                      <Undo2 className={`w-3.5 h-3.5 text-rose-600 ${isUndoing ? 'animate-spin' : ''}`} />
+                      {isUndoing ? 'Mengurungkan...' : 'Urungkan Aksi'}
+                    </button>
+                  )}
+
                   {/* Refresh Database Button */}
                   <button
                     id="btn-refresh-database-table"
@@ -1147,8 +1430,8 @@ export default function App() {
                     onChange={(e) => setGradeFilter(e.target.value)}
                   >
                     <option value="All">Semua Grade</option>
-                    {uniqueGrades.filter(g => g !== 'All').map((g) => (
-                      <option key={g} value={g}>{g}</option>
+                    {uniqueGrades.filter(g => g !== 'All').map((g, idx) => (
+                      <option key={`filter-grade-${g}-${idx}`} value={g}>{g}</option>
                     ))}
                   </select>
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
@@ -1298,7 +1581,7 @@ export default function App() {
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              {currentUser?.nama?.toLowerCase().includes('ustadz') && (
+                              {currentUser?.role === 'ustadz' && (
                                 <button
                                   id={`btn-delete-setoran-${item.id}`}
                                   onClick={(e) => {
@@ -1436,8 +1719,8 @@ export default function App() {
                     onChange={(e) => setGradeFilter(e.target.value)}
                   >
                     <option value="All">Semua Grade</option>
-                    {uniqueGrades.filter(g => g !== 'All').map((g) => (
-                      <option key={`stats-grade-${g}`} value={g}>{g}</option>
+                    {uniqueGrades.filter(g => g !== 'All').map((g, idx) => (
+                      <option key={`stats-grade-${g}-${idx}`} value={g}>{g}</option>
                     ))}
                   </select>
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
@@ -1657,7 +1940,7 @@ export default function App() {
               
               {/* Form Column - Only for Ustadz, else Motivation card */}
               <div className="lg:col-span-1 space-y-6">
-                {currentUser?.nama?.toLowerCase().includes('ustadz') ? (
+                {currentUser?.role === 'ustadz' ? (
                   <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                       <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -2046,7 +2329,7 @@ export default function App() {
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              {currentUser?.nama?.toLowerCase().includes('ustadz') && (
+                              {currentUser?.role === 'ustadz' && (
                                 <button
                                   onClick={() => setConfirmDeleteTugas(t)}
                                   className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
@@ -2077,6 +2360,249 @@ export default function App() {
                 </div>
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'capaian_ziyadah' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom duration-300">
+            
+            {/* Header info bar */}
+            <div className="bg-[#0000FE] text-white rounded-3xl p-6 shadow-sm border border-blue-700 relative overflow-hidden">
+              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
+              <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold flex items-center gap-2">
+                    <Award className="w-5 h-5 text-blue-200 animate-bounce" />
+                    Capaian Target Ziyadah Siswa
+                  </h2>
+                  <p className="text-blue-50 text-xs mt-1 font-semibold">
+                    Pantau target hafalan (ziyadah) baris siswa dalam satu tahun secara presisi dan objektif.
+                  </p>
+                </div>
+                {currentUser && currentUser.role === 'ustadz' && (
+                  <span className="bg-white/20 text-white text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-wider border border-white/20">
+                    Mode Ustadz
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Key Stats Cards Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Siswa</span>
+                  <div className="p-2 bg-slate-50 text-slate-500 rounded-xl">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <h4 className="text-xl font-black text-slate-800">{capaianStats.total}</h4>
+                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Siswa terdaftar target</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Rata-rata Capaian</span>
+                  <div className="p-2 bg-blue-50 text-[#0000FE] rounded-xl">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <h4 className="text-xl font-black text-[#0000FE]">{capaianStats.avgPercentage}%</h4>
+                  <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
+                    <div className="bg-[#0000FE] h-full" style={{ width: `${Math.min(capaianStats.avgPercentage, 100)}%` }}></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider font-extrabold">Mencapai Target</span>
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <h4 className="text-xl font-black text-emerald-700">{capaianStats.reachedTarget}</h4>
+                  <p className="text-[9px] text-emerald-600 font-bold mt-0.5 font-sans">Lulus Target 100% 🎉</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider font-extrabold">Capaian Tertinggi</span>
+                  <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                    <Trophy className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <h4 className="text-xl font-black text-amber-700">{capaianStats.highestPct}%</h4>
+                  <p className="text-[9px] text-amber-600 font-semibold mt-0.5">Skor persentase tertinggi</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter controls panel */}
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
+              
+              {/* Search */}
+              <div className="relative w-full md:w-72">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  id="input-capaian-search"
+                  type="text"
+                  placeholder="Cari nama siswa..."
+                  value={capaianSearch}
+                  onChange={(e) => setCapaianSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0000FE] focus:ring-1 focus:ring-[#0000FE]"
+                />
+              </div>
+
+              {/* Dropdowns */}
+              <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                <div className="flex items-center gap-1 w-full sm:w-auto">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Kelas:</span>
+                  <select
+                    id="select-capaian-grade-filter"
+                    value={capaianGradeFilter}
+                    onChange={(e) => setCapaianGradeFilter(e.target.value)}
+                    className="w-full sm:w-auto px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0000FE]"
+                  >
+                    {uniqueCapaianGrades.map((grade, idx) => (
+                      <option key={`capaian-grade-${grade}-${idx}`} value={grade}>{grade === 'All' ? 'Semua Kelas' : grade}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1 w-full sm:w-auto">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Urutan:</span>
+                  <select
+                    id="select-capaian-sort-filter"
+                    value={capaianSortBy}
+                    onChange={(e) => setCapaianSortBy(e.target.value as any)}
+                    className="w-full sm:w-auto px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0000FE]"
+                  >
+                    <option value="percentage_desc">Capaian Tertinggi</option>
+                    <option value="percentage_asc">Capaian Terendah</option>
+                    <option value="name">Nama Siswa (A-Z)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Students list cards/grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {processedCapaianList.length === 0 ? (
+                <div className="col-span-full bg-slate-50 border border-dashed border-slate-200 rounded-3xl p-12 text-center">
+                  <Award className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 text-xs font-bold font-sans">Tidak ada data capaian target yang cocok.</p>
+                  <p className="text-slate-400 text-[10px] mt-0.5">Silakan ganti kata kunci pencarian atau filter kelas Anda.</p>
+                </div>
+              ) : (
+                processedCapaianList.map((item, idx) => {
+                  const percentage = item.persentase !== undefined && item.persentase !== null
+                    ? item.persentase
+                    : (item.target > 0 ? Math.round((item.capaian / item.target) * 100) : 0);
+                  
+                  // Color configuration based on percentage tier
+                  let colorTheme = {
+                    bg: 'bg-rose-50 border-rose-100',
+                    text: 'text-rose-700',
+                    bar: 'bg-rose-500',
+                    badge: 'bg-rose-100 text-rose-800 border-rose-200',
+                    label: 'Perlu Bimbingan'
+                  };
+                  if (percentage >= 100) {
+                    colorTheme = {
+                      bg: 'bg-sky-50 border-sky-100 border',
+                      text: 'text-[#0000FE]',
+                      bar: 'bg-gradient-to-r from-blue-500 to-indigo-600',
+                      badge: 'bg-blue-100 text-[#0000FE] border-blue-200 border',
+                      label: 'Melampaui Target 🎉'
+                    };
+                  } else if (percentage >= 71) {
+                    colorTheme = {
+                      bg: 'bg-emerald-50/50 border-emerald-100 border',
+                      text: 'text-emerald-700',
+                      bar: 'bg-emerald-500',
+                      badge: 'bg-emerald-100 text-emerald-800 border-emerald-200 border',
+                      label: 'Mendekati Target'
+                    };
+                  } else if (percentage >= 36) {
+                    colorTheme = {
+                      bg: 'bg-amber-50/50 border-amber-100 border',
+                      text: 'text-amber-700',
+                      bar: 'bg-amber-500',
+                      badge: 'bg-amber-100 text-amber-800 border-amber-200 border',
+                      label: 'Sedang Berjalan Baik'
+                    };
+                  }
+
+                  const isMe = currentUser && isStudentNameMatched(item.nama, currentUser.nama);
+
+                  return (
+                    <div
+                      key={`capaian-${item.id || ''}-${idx}`}
+                      className={`bg-white rounded-3xl p-5 shadow-xs border transition-all duration-300 relative overflow-hidden group hover:shadow-md hover:-translate-y-0.5 ${
+                        isMe ? 'ring-2 ring-[#0000FE] border-[#0000FE]/20' : 'border-slate-100'
+                      }`}
+                    >
+                      {/* Highlight label for logged in student */}
+                      {isMe && (
+                        <div className="absolute top-0 right-0 bg-[#0000FE] text-white text-[8px] font-black uppercase tracking-wider px-3.5 py-1 rounded-bl-xl shadow-xs font-sans">
+                          Hafalan Saya
+                        </div>
+                      )}
+
+                      {/* Header row */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-extrabold text-slate-800 group-hover:text-[#0000FE] transition-colors">
+                            {item.nama}
+                          </h3>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.grade}</span>
+                        </div>
+                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border shrink-0 ${colorTheme.badge}`}>
+                          {percentage}%
+                        </span>
+                      </div>
+
+                      {/* Visual Progress gauge */}
+                      <div className="mt-5 space-y-2">
+                        <div className="flex justify-between items-center text-[11px] font-semibold text-slate-500">
+                          <span className="flex items-center gap-1 font-sans">
+                            <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                            Capaian: <strong className="text-slate-700 font-extrabold">{item.capaian}</strong> baris
+                          </span>
+                          <span className="flex items-center gap-1 font-sans">
+                            <Target className="w-3.5 h-3.5 text-slate-400" />
+                            Target: <strong className="text-slate-700 font-extrabold">{item.target}</strong> baris
+                          </span>
+                        </div>
+
+                        {/* Progress Bar background and fill */}
+                        <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
+                          <div
+                            className={`h-full rounded-full transition-all duration-1000 ${colorTheme.bar}`}
+                            style={{ width: `${Math.min(percentage, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Bottom status badge */}
+                      <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-[10px] font-bold">
+                        <span className="text-slate-400 uppercase tracking-wider">Status Capaian:</span>
+                        <span className={`px-2 py-0.5 rounded-md ${colorTheme.bg} ${colorTheme.text} border text-[9px] font-black uppercase tracking-wide font-sans`}>
+                          {colorTheme.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -2188,6 +2714,42 @@ export default function App() {
                 Ya, Hapus Tugas
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Undo Toast Notification */}
+      {showUndoToast && lastAction && currentUser && currentUser.role === 'ustadz' && (
+        <div id="toast-undo" className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-xl border border-slate-800 flex items-center justify-between gap-6 max-w-sm animate-in slide-in-from-bottom duration-300">
+          <div className="space-y-0.5">
+            <p className="text-xs font-bold text-slate-100">
+              {lastAction.type === 'add' && 'Penilaian berhasil ditambahkan'}
+              {lastAction.type === 'edit' && 'Penilaian berhasil diperbarui'}
+              {lastAction.type === 'delete' && 'Penilaian berhasil dihapus'}
+            </p>
+            <p className="text-[11px] text-slate-400 font-medium">
+              Siswa: <span className="font-bold text-slate-200">{lastAction.data.nama}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              id="btn-undo-toast"
+              onClick={handleUndo}
+              disabled={isUndoing}
+              className="flex items-center gap-1 bg-[#0000FE] hover:bg-[#0000FE]/80 active:scale-95 disabled:opacity-50 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
+            >
+              <Undo2 className={`w-3.5 h-3.5 ${isUndoing ? 'animate-spin' : ''}`} />
+              {isUndoing ? 'Mengurungkan...' : 'Urungkan'}
+            </button>
+            <button
+              id="btn-close-undo-toast"
+              onClick={() => setShowUndoToast(false)}
+              className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}
