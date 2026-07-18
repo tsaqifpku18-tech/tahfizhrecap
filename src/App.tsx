@@ -31,7 +31,11 @@ import {
   Target,
   Trophy,
   ChevronDown,
-  Bell
+  Bell,
+  Menu,
+  X,
+  Smile,
+  Frown
 } from 'lucide-react';
 import { Setoran, Settings, UserSession, TugasHarian, CapaianTargetZiyadah } from './types';
 import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH } from './data';
@@ -300,6 +304,8 @@ export default function App() {
 
   // UI / Navigation / Tab State
   const [showConfig, setShowConfig] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [showLatestInfoPopup, setShowLatestInfoPopup] = useState<boolean>(true);
 
   // 2. Filter States
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -1027,6 +1033,36 @@ export default function App() {
       .sort((a, b) => new Date(b.tanggalSetoran).getTime() - new Date(a.tanggalSetoran).getTime());
   }, [selectedStudentName, setoran]);
 
+  // Latest assessment for the student
+  const latestAssessmentForStudent = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'siswa') return null;
+    const studentAssessments = setoran.filter(s => isStudentNameMatched(s.nama, currentUser.nama));
+    if (studentAssessments.length === 0) return null;
+    return [...studentAssessments].sort((a, b) => {
+      const dateA = new Date(a.tanggalSetoran).getTime();
+      const dateB = new Date(b.tanggalSetoran).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return setoran.indexOf(b) - setoran.indexOf(a);
+    })[0];
+  }, [setoran, currentUser]);
+
+  // Latest tugas harian for the student
+  const latestTugasForStudent = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'siswa') return null;
+    const studentTasks = tugasHarian.filter(t => {
+      const matchesGrade = t.grade === 'All' || (currentUser.grade && t.grade === currentUser.grade);
+      const matchesSiswa = t.siswa === 'All' || isStudentNameMatched(t.siswa, currentUser.nama);
+      return matchesGrade || matchesSiswa;
+    });
+    if (studentTasks.length === 0) return null;
+    return [...studentTasks].sort((a, b) => {
+      const dateA = new Date(a.tanggal).getTime();
+      const dateB = new Date(b.tanggal).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return tugasHarian.indexOf(b) - tugasHarian.indexOf(a);
+    })[0];
+  }, [tugasHarian, currentUser]);
+
   // List of active students with ID & Grade for dropdown auto-population
   const activeStudentsList = useMemo(() => {
     const map: { [key: string]: { id: string; nama: string; grade: string } } = {};
@@ -1140,7 +1176,17 @@ export default function App() {
       {/* Top persistent white Header */}
       <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6 z-10 shrink-0">
         {/* Left Section (Brand/Logo Group) */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Menu Toggle Button */}
+          <button
+            id="btn-toggle-menu"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 mr-1 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center"
+            title={isSidebarOpen ? "Tutup Menu" : "Buka Menu"}
+          >
+            <Menu className="w-5 h-5 text-slate-600" />
+          </button>
+
           <div className="w-10 h-10 rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center p-1.5 overflow-hidden shrink-0">
             <AlWildanLogo size={28} customUrl={customLogo} />
           </div>
@@ -1156,7 +1202,7 @@ export default function App() {
 
         {/* Center Section */}
         <div className="text-xs font-bold text-slate-400 tracking-wider uppercase hidden md:block">
-          Portal Wali Kelas & Wali Murid
+          Portal Guru Al-Qur'an & Wali Murid
         </div>
 
         {/* Right Section (Controls & Status Indicators) */}
@@ -1202,7 +1248,9 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         
         {/* Sidebar Navigation */}
-        <aside className="w-72 bg-white border-r border-slate-200 text-slate-800 flex flex-col justify-between shrink-0 p-4 shadow-xs z-10 select-none overflow-y-auto">
+        <aside className={`transition-all duration-300 ease-in-out ${
+          isSidebarOpen ? 'w-72 p-4 opacity-100 border-r border-slate-200' : 'w-0 p-0 opacity-0 overflow-hidden border-r-0'
+        } bg-white text-slate-800 flex flex-col justify-between shrink-0 shadow-xs z-10 select-none overflow-y-auto`}>
           <div className="flex flex-col gap-5">
             {/* Top toggle (Role display) */}
             <div className="bg-slate-100 p-1 rounded-xl flex items-center w-full gap-1 border border-slate-200 shrink-0">
@@ -1247,7 +1295,7 @@ export default function App() {
                 <div className="min-w-0">
                   <h4 className="text-xs font-black text-slate-800 truncate leading-tight group-hover:text-[#0000FE] transition-colors">{currentUser.nama}</h4>
                   <p className="text-[10px] text-slate-500 mt-0.5 font-semibold leading-none">
-                    {currentUser.role === 'ustadz' ? 'Wali Kelas / Guru' : 'Siswa / Wali Murid'}
+                    {currentUser.role === 'ustadz' ? "Guru Al-Qur'an" : 'Siswa / Wali Murid'}
                   </p>
                 </div>
               </div>
@@ -1332,8 +1380,8 @@ export default function App() {
               
               <div className="space-y-1.5 text-[10px] text-slate-600 font-semibold leading-none">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Wali Kelas:</span>
-                  <span className="font-bold text-slate-800">Ustadz Syuja</span>
+                  <span className="text-slate-400">Guru Al-Qur'an:</span>
+                  <span className="font-bold text-slate-800">Ust. Tsaqif/Ust. Syuja/Ust. Salman</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Tahun Ajaran:</span>
@@ -1509,11 +1557,32 @@ export default function App() {
           <div className="space-y-6">
             {activeTab === 'rekap' && (
           <>
+            {/* "Lihat Informasi Terbaru" Quick Button/Banner for Student Account */}
+            {currentUser?.role === 'siswa' && (
+              <div className="w-full bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs animate-in fade-in duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-[#0000FE]/10 text-[#0000FE]">
+                    <Sparkles className="w-5 h-5 text-[#0000FE]" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800">Ada update penilaian atau tugas baru?</h4>
+                    <p className="text-[11px] text-slate-500 font-semibold mt-0.5">Lihat rekapitulasi data penilaian & tugas harian terakhir Anda secara terpadu.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowLatestInfoPopup(true)}
+                  className="w-full sm:w-auto px-4 py-2 bg-[#0000FE] hover:bg-[#0000D0] text-white text-xs font-extrabold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer text-center"
+                >
+                  Buka Pop-up Informasi
+                </button>
+              </div>
+            )}
+
             {/* Content Bento Grid: Form & Student Table with search/filters */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
            {/* Column 1: Input Assessment Form or Student Profile Progress Card */}
-          <div className="lg:col-span-1 space-y-6">
+          <div className="lg:col-span-1 space-y-6 order-2">
             {currentUser.role === 'ustadz' ? (
               <NewAssessmentForm
                 onAddSetoran={handleAddSetoran}
@@ -1563,7 +1632,7 @@ export default function App() {
           </div>
 
           {/* Column 2 & 3: Table and Filters */}
-          <div className="lg:col-span-2 bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6 flex flex-col justify-between">
+          <div className="lg:col-span-2 bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6 flex flex-col justify-between order-1">
             
             {/* Table Control Header */}
             <div className="space-y-4">
@@ -2158,11 +2227,32 @@ export default function App() {
               </div>
             </div>
 
+            {/* "Lihat Informasi Terbaru" Quick Button/Banner for Student Account */}
+            {currentUser?.role === 'siswa' && (
+              <div className="w-full bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs animate-in fade-in duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-[#0000FE]/10 text-[#0000FE]">
+                    <Sparkles className="w-5 h-5 text-[#0000FE]" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800">Ada update penilaian atau tugas baru?</h4>
+                    <p className="text-[11px] text-slate-500 font-semibold mt-0.5">Lihat rekapitulasi data penilaian & tugas harian terakhir Anda secara terpadu.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowLatestInfoPopup(true)}
+                  className="w-full sm:w-auto px-4 py-2 bg-[#0000FE] hover:bg-[#0000D0] text-white text-xs font-extrabold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer text-center"
+                >
+                  Buka Pop-up Informasi
+                </button>
+              </div>
+            )}
+
             {/* Sub content grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
               {/* Form Column - Only for Ustadz, else Motivation card */}
-              <div className="lg:col-span-1 space-y-6">
+              <div className="lg:col-span-1 space-y-6 order-2">
                 {currentUser?.role === 'ustadz' ? (
                   <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -2414,7 +2504,7 @@ export default function App() {
               </div>
 
               {/* Tasks List Column */}
-              <div className="lg:col-span-2 space-y-4">
+              <div className="lg:col-span-2 space-y-4 order-1">
                 {/* Search & Filters for Tasks */}
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="relative w-full sm:max-w-xs">
@@ -2989,6 +3079,183 @@ export default function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up Informasi Data Penilaian & Tugas Terbaru (di akun siswa) */}
+      {showLatestInfoPopup && currentUser && currentUser.role === 'siswa' && (
+        <div id="latest-info-popup" className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300">
+          <div 
+            className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-6 bg-gradient-to-r from-[#0000FE] to-blue-700 text-white relative">
+              <button
+                onClick={() => setShowLatestInfoPopup(false)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="Tutup"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/15 rounded-xl border border-white/10">
+                  <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-wider text-blue-100">Informasi Terbaru Anda</h3>
+                  <h2 className="text-lg font-black text-white mt-0.5 leading-tight">Update Penilaian & Tugas Harian</h2>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-6">
+              
+              {/* SECTION 1: PENILAIAN TERAKHIR */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-[#0000FE]" />
+                  Penilaian Terakhir Anda
+                </h4>
+
+                {latestAssessmentForStudent ? (
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-4 hover:border-blue-200 transition-all shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-blue-50 text-[#0000FE] border border-blue-100 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">
+                          {latestAssessmentForStudent.kegiatan}
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-bold">{latestAssessmentForStudent.tanggalSetoran}</span>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                        latestAssessmentForStudent.status === 'Boleh Lanjut' 
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}>
+                        {latestAssessmentForStudent.status === 'Boleh Lanjut' ? (
+                          <Smile className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Frown className="w-3.5 h-3.5 text-rose-600" />
+                        )}
+                        {latestAssessmentForStudent.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 border-t border-slate-200/60 pt-3">
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Materi Hafalan</span>
+                        <span className="text-sm font-black text-slate-800 mt-0.5 block">
+                          {latestAssessmentForStudent.surah}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jumlah {getSatuanByKegiatan(latestAssessmentForStudent.kegiatan)}</span>
+                        <span className="text-sm font-black text-slate-800 mt-0.5 block">
+                          {latestAssessmentForStudent.baris} {getSatuanByKegiatan(latestAssessmentForStudent.kegiatan)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nilai</span>
+                        <span className="text-sm font-black text-[#0000FE] mt-0.5 block">
+                          {latestAssessmentForStudent.nilai}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-sans">Guru Al-Qur'an</span>
+                        <span className="text-xs font-extrabold text-slate-600 mt-0.5 block font-sans">
+                          Ust. Tsaqif/Ust. Syuja/Ust. Salman
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-slate-500 text-xs italic font-semibold">
+                    Belum ada data penilaian terbaru yang dicatat oleh Ustadz.
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 2: TUGAS HARIAN TERBARU */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ClipboardList className="w-4 h-4 text-[#0000FE]" />
+                  Tugas Harian Terbaru Anda
+                </h4>
+
+                {latestTugasForStudent ? (() => {
+                  const parsed = parseMateriField(latestTugasForStudent.materi);
+                  return (
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-4 hover:border-blue-200 transition-all shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">
+                          Grade: {latestTugasForStudent.grade || 'Semua'}
+                        </span>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-500 font-semibold">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          {latestTugasForStudent.tanggal}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 border-t border-slate-200/60 pt-3 text-xs">
+                        {parsed.isJson ? (
+                          <div className="grid grid-cols-1 gap-2">
+                            {parsed.ziyadah && (
+                              <div className="p-2.5 bg-emerald-50/50 border border-emerald-100/60 rounded-xl">
+                                <span className="block text-[9px] font-bold text-emerald-700 uppercase tracking-wider">Target Ziyadah</span>
+                                <span className="font-extrabold text-slate-800 mt-0.5 block text-xs">{parsed.ziyadah}</span>
+                              </div>
+                            )}
+                            {parsed.murojaah && (
+                              <div className="p-2.5 bg-blue-50/50 border border-blue-100/60 rounded-xl">
+                                <span className="block text-[9px] font-bold text-blue-700 uppercase tracking-wider">Target Murojaah</span>
+                                <span className="font-extrabold text-slate-800 mt-0.5 block text-xs">{parsed.murojaah}</span>
+                              </div>
+                            )}
+                            {parsed.tugasMateri && (
+                              <div className="p-2.5 bg-purple-50/50 border border-purple-100/60 rounded-xl">
+                                <span className="block text-[9px] font-bold text-purple-700 uppercase tracking-wider font-sans">Materi / Pengumuman Lain</span>
+                                <span className="font-extrabold text-slate-800 mt-0.5 block text-xs">{parsed.tugasMateri}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-slate-100/50 rounded-xl font-semibold text-slate-700 leading-relaxed">
+                            {latestTugasForStudent.materi}
+                          </div>
+                        )}
+
+                        {latestTugasForStudent.keterangan && (
+                          <div className="p-3 bg-amber-50/30 border border-amber-100/40 rounded-xl text-[11px] text-slate-600 font-medium italic leading-relaxed whitespace-pre-wrap">
+                            Keterangan: {latestTugasForStudent.keterangan}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-slate-200/60 pt-3 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        <span>Pemberi Tugas: <strong className="text-slate-600 font-extrabold">{latestTugasForStudent.ustadz || 'Ustadz'}</strong></span>
+                      </div>
+                    </div>
+                  );
+                })() : (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-slate-500 text-xs italic font-semibold">
+                    Belum ada tugas harian terbaru untuk kelas Anda.
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-end">
+              <button
+                onClick={() => setShowLatestInfoPopup(false)}
+                className="w-full py-3 bg-[#0000FE] hover:bg-[#0000D0] text-white font-black rounded-2xl shadow-md transition-all active:scale-98 cursor-pointer text-center text-xs"
+              >
+                Alhamdulillah, Saya Mengerti
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -249,7 +249,7 @@ export function ProfileSettingsModal({
                   </div>
                   <p className="text-xs text-slate-400 mt-1 font-medium flex items-center gap-1">
                     <Shield className="w-3.5 h-3.5 text-amber-500" />
-                    {currentUser.role === 'ustadz' ? 'Akses Wali Kelas (Ustadz / Admin)' : 'Akses Siswa / Wali Murid'}
+                    {currentUser.role === 'ustadz' ? 'Akses Guru Al-Qur\'an (Ustadz / Admin)' : 'Akses Siswa / Wali Murid'}
                   </p>
                 </div>
               </div>
