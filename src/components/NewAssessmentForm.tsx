@@ -173,14 +173,14 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
   };
 
   return (
-    <div id="new-assessment-form" className={`bg-white rounded-3xl p-6 shadow-sm border transition-all duration-300 ${editingRecord ? 'border-amber-300 shadow-md ring-2 ring-amber-500/5' : 'border-slate-200'}`}>
-      <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-5">
+    <div id="new-assessment-form" className={`bg-white rounded-3xl p-6 shadow-xl shadow-blue-900/5 border transition-all duration-300 ${editingRecord ? 'border-amber-500 shadow-md ring-2 ring-amber-500/10' : 'border-slate-200'}`}>
+      <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
         <div className="flex items-center space-x-3">
           <div className={`p-2.5 rounded-2xl ${editingRecord ? 'bg-amber-50 text-amber-600 animate-pulse' : 'bg-blue-50 text-[#0000FE]'}`}>
             {editingRecord ? <Pencil className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-800">
+            <h2 className="text-lg font-bold text-slate-900">
               {editingRecord ? 'Ubah Penilaian Siswa' : 'Catat Penilaian Baru'}
             </h2>
             <p className="text-xs text-slate-500">
@@ -192,12 +192,12 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
 
       <form onSubmit={handleSubmit} className="space-y-4 text-sm">
         {/* Toggle Student Source */}
-        <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl mb-2">
+        <div className="grid grid-cols-2 p-1 bg-slate-50 rounded-xl mb-2 border border-slate-100">
           <button
             id="toggle-existing-student"
             type="button"
             className={`py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-              !isNewStudent ? 'bg-white text-[#0000FE] shadow-xs' : 'text-slate-500 hover:text-slate-700'
+              !isNewStudent ? 'bg-white text-[#0000FE] border border-slate-200 shadow-xs' : 'text-slate-500 hover:text-slate-700'
             }`}
             onClick={() => {
               setIsNewStudent(false);
@@ -213,7 +213,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             id="toggle-new-student"
             type="button"
             className={`py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-              isNewStudent ? 'bg-white text-[#0000FE] shadow-xs' : 'text-slate-500 hover:text-slate-700'
+              isNewStudent ? 'bg-white text-[#0000FE] border border-slate-200 shadow-xs' : 'text-slate-500 hover:text-slate-700'
             }`}
             onClick={() => {
               setIsNewStudent(true);
@@ -236,7 +236,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             </label>
             <select
               id="select-registered-student"
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE]"
               value={selectedStudentId}
               onChange={(e) => {
                 const val = e.target.value;
@@ -275,8 +275,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               id="input-student-id"
               type="text"
               readOnly={!isNewStudent}
-              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] ${
-                !isNewStudent ? 'bg-slate-50 text-slate-500' : 'bg-white'
+              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE] ${
+                !isNewStudent ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-slate-50'
               }`}
               value={id}
               onChange={(e) => setId(e.target.value)}
@@ -292,8 +292,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               id="input-student-name"
               type="text"
               readOnly={!isNewStudent}
-              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] ${
-                !isNewStudent ? 'bg-slate-50 text-slate-500' : 'bg-white'
+              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE] ${
+                !isNewStudent ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-slate-50'
               }`}
               value={nama}
               onChange={(e) => setNama(e.target.value)}
@@ -309,8 +309,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               id="input-student-grade"
               type="text"
               readOnly={!isNewStudent}
-              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] ${
-                !isNewStudent ? 'bg-slate-50 text-slate-500' : 'bg-white'
+              className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE] ${
+                !isNewStudent ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-slate-50'
               }`}
               value={grade}
               onChange={(e) => setGrade(e.target.value)}
@@ -328,7 +328,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <input
               id="input-submission-date"
               type="date"
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE]"
               value={tanggalSetoran}
               onChange={(e) => setTanggalSetoran(e.target.value)}
             />
@@ -341,7 +341,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <input
               id="input-submission-surah"
               type="text"
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE]"
               value={surah}
               onChange={(e) => setSurah(e.target.value)}
               placeholder="e.g. An-Naba' 1-10, Iqra 4"
@@ -360,8 +360,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               type="button"
               className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                 kegiatan === 'Ziyadah'
-                  ? 'bg-blue-50 text-[#0000FE] border-blue-200 ring-2 ring-[#0000FE]/10'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  ? 'bg-blue-50 text-[#0000FE] border-blue-200 ring-2 ring-blue-500/10'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
               onClick={() => setKegiatan('Ziyadah')}
             >
@@ -370,10 +370,10 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <button
               id="btn-activity-tahsin-tilawah"
               type="button"
-              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                 kegiatan === 'Tahsin (Tilawah)'
-                  ? 'bg-blue-50 text-blue-700 border-blue-200 ring-2 ring-blue-500/10'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  ? 'bg-blue-50 text-[#0000FE] border-blue-200 ring-2 ring-blue-500/10'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
               onClick={() => setKegiatan('Tahsin (Tilawah)')}
             >
@@ -382,10 +382,10 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <button
               id="btn-activity-tahsin-iqra"
               type="button"
-              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                 kegiatan === "Tahsin (IQRA')"
                   ? 'bg-indigo-50 text-indigo-700 border-indigo-200 ring-2 ring-indigo-500/10'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
               onClick={() => setKegiatan("Tahsin (IQRA')")}
             >
@@ -394,10 +394,10 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <button
               id="btn-activity-tahsin-qoidah"
               type="button"
-              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                 kegiatan === 'Tahsin (Qoidah)'
                   ? 'bg-violet-50 text-violet-700 border-violet-200 ring-2 ring-violet-500/10'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
               onClick={() => setKegiatan('Tahsin (Qoidah)')}
             >
@@ -406,10 +406,10 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
             <button
               id="btn-activity-murojaah"
               type="button"
-              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all col-span-2 sm:col-span-1 lg:col-span-1 ${
+              className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all col-span-2 sm:col-span-1 lg:col-span-1 cursor-pointer ${
                 kegiatan === 'Murojaah'
                   ? 'bg-amber-50 text-amber-700 border-amber-200 ring-2 ring-amber-500/10'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
               onClick={() => setKegiatan('Murojaah')}
             >
@@ -429,7 +429,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id="btn-decrement-baris"
                 type="button"
                 onClick={() => setBaris(Math.max(1, baris - 1))}
-                className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors"
+                className="w-10 h-10 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
               >
                 -
               </button>
@@ -437,7 +437,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id="input-baris-count"
                 type="number"
                 min="1"
-                className="w-16 h-10 text-center rounded-xl border border-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20"
+                className="w-16 h-10 text-center rounded-xl border border-slate-200 bg-slate-50 text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 value={baris}
                 onChange={(e) => setBaris(Math.max(1, parseInt(e.target.value) || 1))}
               />
@@ -445,11 +445,11 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id="btn-increment-baris"
                 type="button"
                 onClick={() => setBaris(baris + 1)}
-                className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
+                className="w-10 h-10 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
               >
                 +
               </button>
-              <span className="text-xs text-slate-400 font-medium capitalize">{getSatuanByKegiatan(kegiatan)}</span>
+              <span className="text-xs text-slate-500 font-bold capitalize">{getSatuanByKegiatan(kegiatan)}</span>
             </div>
           </div>
 
@@ -464,8 +464,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 onClick={() => setStatus('Boleh Lanjut')}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   status === 'Boleh Lanjut'
-                    ? 'bg-blue-50 text-[#0000FE] border-blue-300 shadow-xs ring-2 ring-[#0000FE]/10'
-                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                    ? 'bg-blue-50 text-[#0000FE] border-blue-200 shadow-xs ring-2 ring-blue-500/10'
+                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
                 }`}
               >
                 <Smile className="w-3.5 h-3.5" /> Boleh Lanjut
@@ -476,8 +476,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 onClick={() => setStatus('Ulangi')}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   status === 'Ulangi'
-                    ? 'bg-rose-50 text-rose-700 border-rose-300 shadow-xs ring-2 ring-rose-500/10'
-                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-xs ring-2 ring-rose-500/10'
+                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
                 }`}
               >
                 <Frown className="w-3.5 h-3.5" /> Ulangi
@@ -494,7 +494,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
           <input
             id="input-notes-text"
             type="text"
-            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] mb-2"
+            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE] mb-2"
             value={ctt}
             onChange={(e) => setCtt(e.target.value)}
             placeholder="Tulis nilai kelancaran atau tajwid..."
@@ -506,10 +506,10 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
                 id={`btn-feedback-shortcut-${opt.toLowerCase().replace(/\s+/g, '-')}`}
                 type="button"
                 onClick={() => handleCttSelect(opt)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                   ctt === opt
-                    ? 'bg-blue-100 text-[#0000FE] border-blue-300'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
+                    ? 'bg-blue-50 text-[#0000FE] border border-blue-200'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
                 }`}
               >
                 {opt}
@@ -519,10 +519,10 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
         </div>
 
         {/* Tugas Selanjutnya Section (Optional) */}
-        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-3 mt-4">
-          <div className="flex items-center justify-between pb-1 border-b border-slate-200/60 mb-1">
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Tugas Selanjutnya (Opsional)</span>
-            <span className="text-[10px] bg-blue-100 text-[#0000FE] font-bold px-1.5 py-0.5 rounded-full uppercase">Sinkron Sheets</span>
+        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 mt-4">
+          <div className="flex items-center justify-between pb-1 border-b border-slate-200 mb-1">
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Tugas Selanjutnya (Opsional)</span>
+            <span className="text-[10px] bg-blue-50 text-[#0000FE] font-bold px-1.5 py-0.5 border border-blue-100 rounded-full uppercase">Sinkron Sheets</span>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -533,7 +533,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               <input
                 id="input-tugas-ziyadah"
                 type="text"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE]"
                 value={tugasZiyadah}
                 onChange={(e) => setTugasZiyadah(e.target.value)}
                 placeholder="e.g. Al-Mulk 1-10"
@@ -546,7 +546,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               <input
                 id="input-tugas-murojaah"
                 type="text"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE]"
                 value={tugasMurojaah}
                 onChange={(e) => setTugasMurojaah(e.target.value)}
                 placeholder="e.g. Juz 30"
@@ -559,7 +559,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
               <input
                 id="input-tugas-materi"
                 type="text"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0000FE]"
                 value={tugasMateri}
                 onChange={(e) => setTugasMateri(e.target.value)}
                 placeholder="e.g. Tajwid Mad Jaiz"
@@ -571,8 +571,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
         {/* Notifications and Submission */}
         <div className="pt-3 border-t border-slate-100">
           {formSuccess && (
-            <div id="form-success-alert" className="bg-blue-50 border border-blue-200 text-blue-800 rounded-xl p-3 text-xs flex items-start gap-2 mb-3">
-              <CheckCircle2 className="w-4 h-4 text-[#0000FE] shrink-0 mt-0.5" />
+            <div id="form-success-alert" className="bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl p-3 text-xs flex items-start gap-2 mb-3">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">Alhamdulillah!</span> Data setoran hafalan berhasil {editingRecord ? 'diperbarui' : 'dicatat'} dan disinkronisasikan ke database.
               </div>
@@ -580,7 +580,7 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
           )}
 
           {formError && (
-            <div id="form-error-alert" className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs flex items-start gap-2 mb-3">
+            <div id="form-error-alert" className="bg-rose-50 border border-rose-100 text-rose-800 rounded-xl p-3 text-xs flex items-start gap-2 mb-3">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">Submisi gagal:</span> {formError}

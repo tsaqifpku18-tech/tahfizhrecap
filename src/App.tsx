@@ -29,7 +29,9 @@ import {
   Music,
   Undo2,
   Target,
-  Trophy
+  Trophy,
+  ChevronDown,
+  Bell
 } from 'lucide-react';
 import { Setoran, Settings, UserSession, TugasHarian, CapaianTargetZiyadah } from './types';
 import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH } from './data';
@@ -38,6 +40,8 @@ import { NewAssessmentForm } from './components/NewAssessmentForm';
 import { StudentDetailModal } from './components/StudentDetailModal';
 import { StatsCharts } from './components/StatsCharts';
 import { LoginPage } from './components/LoginPage';
+import { AlWildanLogo } from './components/AlWildanLogo';
+import { ProfileSettingsModal } from './components/ProfileSettingsModal';
 
 // Helper function to format date to dd MMMM yyyy (Indonesian)
 const formatTanggalIndo = (tanggalStr: string): string => {
@@ -240,6 +244,35 @@ export default function App() {
   const handleLoginSuccess = (session: UserSession) => {
     setCurrentUser(session);
     localStorage.setItem('tahfizh_user_session', JSON.stringify(session));
+  };
+
+  // Profile Picture States (Loaded from localStorage)
+  const [profilePics, setProfilePics] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('tahfizh_profile_pics');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Custom Logo State (Loaded from localStorage)
+  const [customLogo, setCustomLogo] = useState<string>(() => {
+    return localStorage.getItem('tahfizh_custom_logo') || "https://lh3.googleusercontent.com/d/1ZViH5e-ooEl4MW1MxrSF0Qu6jdfHlYw0";
+  });
+
+  const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+
+  const handleUpdateProfilePic = (name: string, dataUrl: string) => {
+    const updated = { ...profilePics };
+    if (dataUrl) {
+      updated[name] = dataUrl;
+    } else {
+      delete updated[name];
+    }
+    setProfilePics(updated);
+    localStorage.setItem('tahfizh_profile_pics', JSON.stringify(updated));
+  };
+
+  const handleUpdateCustomLogo = (dataUrl: string) => {
+    setCustomLogo(dataUrl);
+    localStorage.setItem('tahfizh_custom_logo', dataUrl);
   };
 
   // Default Google Apps Script URL set by the developer
@@ -1086,12 +1119,13 @@ export default function App() {
         appsScriptUrl={settings.appsScriptUrl}
         usingDemoData={usingDemoData}
         onLoginSuccess={handleLoginSuccess}
+        customLogo={customLogo}
       />
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-16">
+    <div className="h-screen overflow-hidden flex flex-col bg-slate-50 text-slate-800 font-sans">
       
       {/* Dynamic Student Detail Drilldown modal */}
       {selectedStudentName && (
@@ -1099,205 +1133,386 @@ export default function App() {
           studentName={selectedStudentName}
           studentHistory={studentHistory}
           onClose={() => setSelectedStudentName(null)}
+          profilePics={profilePics}
         />
       )}
 
-      {/* Modern Banner Header */}
-      <header id="dashboard-header" className="bg-gradient-to-r from-[#0000FE] to-[#FFFFFF] text-slate-900 shadow-md relative overflow-hidden">
-        {/* Subtle decorative background pattern */}
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="bg-white/25 text-white text-xs font-extrabold tracking-widest px-3 py-1 rounded-full uppercase border border-white/40 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" /> Portal Tahfizh Qur'an
-                </span>
-                
-                {/* Active User Session Indicator */}
-                <span className="bg-white/30 text-[#0000FE] text-[11px] font-bold px-3 py-1 rounded-full border border-[#0000FE]/20 flex items-center gap-1">
-                  <UserCheck className="w-3.5 h-3.5 text-[#0000FE]" />
-                  Profil: <strong className="text-slate-900 font-bold">{currentUser.nama}</strong> ({currentUser.role === 'ustadz' ? 'Ustadz' : 'Siswa'})
-                </span>
-              </div>
-              <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white drop-shadow-sm">
-                Dashboard Tahfizh Recap
-              </h1>
-              <p className="text-blue-50 text-xs sm:text-sm font-semibold max-w-2xl">
-                Sistem rekapitulasi evaluasi setoran hafalan (Tahsin & Ziyadah) terintegrasi langsung dengan Google Sheets.
-              </p>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                id="btn-sync-sheets"
-                onClick={handleManualSync}
-                disabled={isSyncing}
-                className="bg-[#0000FE] hover:bg-[#0000D0] text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
-                title={usingDemoData ? "Refresh database contoh lokal" : "Sinkronisasi data ulang dengan Google Sheets"}
-              >
-                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? 'Refreshing...' : usingDemoData ? 'Refresh Database Contoh' : 'Refresh Database'}
-              </button>
-
-              {/* Log Out Button */}
-              <button
-                id="btn-logout"
-                onClick={handleLogout}
-                className="bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
-                title="Keluar dari Akun Anda"
-              >
-                <LogOut className="w-4 h-4" />
-                Keluar
-              </button>
-            </div>
-
+      {/* Top persistent white Header */}
+      <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6 z-10 shrink-0">
+        {/* Left Section (Brand/Logo Group) */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center p-1.5 overflow-hidden shrink-0">
+            <AlWildanLogo size={28} customUrl={customLogo} />
+          </div>
+          <div className="flex flex-col">
+            <h1 className="text-sm font-extrabold text-[#0000FE] leading-tight tracking-wide uppercase">
+              Tahfizh Dashboard
+            </h1>
+            <span className="text-[10px] font-black text-[#0000FE] uppercase tracking-wider bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded w-fit">
+              AL-WILDAN 10
+            </span>
           </div>
         </div>
-      </header>
 
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-5 space-y-6">
+        {/* Center Section */}
+        <div className="text-xs font-bold text-slate-400 tracking-wider uppercase hidden md:block">
+          Portal Wali Kelas & Wali Murid
+        </div>
 
-        {/* Navigation Tabs Menu */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-          <div className="flex gap-1.5 p-1 bg-slate-50 rounded-xl border border-slate-100 self-start sm:self-auto">
-            <button
-              id="tab-rekap-btn"
-              onClick={() => setActiveTab('rekap')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'rekap'
-                  ? 'bg-[#0000FE] text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Rekap Penilaian Tahfizh
-            </button>
-            <button
-              id="tab-tugas-btn"
-              onClick={() => setActiveTab('tugas')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'tugas'
-                  ? 'bg-[#0000FE] text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <ClipboardList className="w-4 h-4" />
-              Tugas Harian
-              {tugasHarian.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'tugas' ? 'bg-white text-[#0000FE] font-extrabold' : 'bg-slate-200 text-slate-600 font-extrabold'}`}>
-                  {tugasHarian.length}
-                </span>
-              )}
-            </button>
-            <button
-              id="tab-statistik-btn"
-              onClick={() => setActiveTab('statistik')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'statistik'
-                  ? 'bg-[#0000FE] text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              Statistik & Grafik
-            </button>
-            <button
-              id="tab-capaian-ziyadah-btn"
-              onClick={() => setActiveTab('capaian_ziyadah')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'capaian_ziyadah'
-                  ? 'bg-[#0000FE] text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Award className="w-4 h-4" />
-              Capaian Target Ziyadah
-            </button>
+        {/* Right Section (Controls & Status Indicators) */}
+        <div className="flex items-center gap-3">
+          {/* Mode Indicator Pill */}
+          {usingDemoData ? (
+            <div className="flex items-center gap-2 bg-amber-50 text-amber-700 text-[10px] font-extrabold px-3 py-1.5 rounded-full border border-amber-200 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+              Mode Simulasi (Demo)
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-blue-50 text-blue-700 text-[10px] font-extrabold px-3 py-1.5 rounded-full border border-blue-200 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#0000FE] animate-pulse shrink-0"></span>
+              Sheets Terkoneksi
+            </div>
+          )}
+
+          {/* Notification Bell Icon */}
+          <div className="relative p-2 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer rounded-full hover:bg-slate-100">
+            <Bell className="w-4 h-4" />
+            <span className="absolute top-1 right-1 bg-rose-500 text-white text-[9px] font-extrabold w-3.5 h-3.5 rounded-full flex items-center justify-center border border-white">
+              1
+            </span>
           </div>
-          
-          {/* Settings Config Option Trigger */}
+
+          {/* MASUK GOOGLE / SHEET URL (Config Trigger) */}
           <button
             id="btn-toggle-config-guide"
             onClick={() => setShowConfig(!showConfig)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all self-end sm:self-auto ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer ${
               showConfig 
-                ? 'bg-slate-800 text-white' 
-                : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                ? 'bg-[#0000FE] border border-[#0000FE] text-white' 
+                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
             }`}
           >
-            <HelpCircle className="w-4 h-4" />
-            Panduan & Spreadsheet Config
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Konfigurasi</span>
           </button>
         </div>
+      </header>
 
-        {/* Spreadsheet Config / Guide Panel */}
-        {showConfig && (
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4 animate-in fade-in slide-in-from-top duration-300">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <FileSpreadsheet className="w-5 h-5 text-[#0000FE]" />
-                  Panduan Hubungan Google Sheets
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">Ikuti langkah-langkah di bawah ini untuk menghubungkan aplikasi Anda ke spreadsheet real-time.</p>
-              </div>
-              <button
-                onClick={() => setShowConfig(false)}
-                className="text-slate-400 hover:text-rose-600 text-xs font-black p-1 px-2.5 bg-slate-50 hover:bg-rose-50 rounded-lg"
+      {/* Main split-screen section */}
+      <div className="flex flex-1 overflow-hidden">
+        
+        {/* Sidebar Navigation */}
+        <aside className="w-72 bg-white border-r border-slate-200 text-slate-800 flex flex-col justify-between shrink-0 p-4 shadow-xs z-10 select-none overflow-y-auto">
+          <div className="flex flex-col gap-5">
+            {/* Top toggle (Role display) */}
+            <div className="bg-slate-100 p-1 rounded-xl flex items-center w-full gap-1 border border-slate-200 shrink-0">
+              <div 
+                className={`w-1/2 text-center text-[11px] font-bold py-2 rounded-lg transition-all ${
+                  currentUser.role === 'siswa'
+                    ? 'text-white bg-[#0000FE] shadow-xs font-black'
+                    : 'text-slate-400 cursor-not-allowed'
+                }`}
               >
-                Tutup
-              </button>
+                Siswa (Viewer)
+              </div>
+              <div 
+                className={`w-1/2 text-center text-[11px] font-bold py-2 rounded-lg transition-all ${
+                  currentUser.role === 'ustadz'
+                    ? 'text-white bg-[#0000FE] shadow-xs font-black'
+                    : 'text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                Ustadz (Admin)
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-600 leading-relaxed font-sans">
-              <div className="space-y-3">
-                <h4 className="font-bold text-slate-800">1. Langkah Penyusunan Spreadsheet</h4>
-                <ol className="list-decimal pl-4 space-y-2 font-medium">
-                  <li>Buat spreadsheet baru di Google Sheets.</li>
-                  <li>Beri nama tab pertama <strong className="text-slate-800">Penilaian</strong>, tab kedua <strong className="text-slate-800">Akun</strong>, dan tab ketiga <strong className="text-slate-800">Tugas Harian</strong>.</li>
-                  <li>Masukkan header kolom persis sesuai panduan di file <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-rose-600">src/data.ts</code>.</li>
-                  <li>Klik menu <strong>Ekstensi</strong> di baris atas Google Sheets, lalu pilih <strong>Apps Script</strong>.</li>
-                  <li>Tempel (Paste) seluruh kode Apps Script yang kami sediakan di tab sebelah ke dalam editor, lalu klik simpan.</li>
-                  <li>Klik tombol <strong>Terapkan</strong> (Deploy) &gt; <strong>Penerapan Baru</strong> (New Deployment). Pilih jenis penerapan <strong>Aplikasi Web</strong> (Web App). Konfigurasi: <i>Execute as: Me</i> dan <i>Who has access: Anyone</i>.</li>
-                  <li>Salin URL Aplikasi Web yang dihasilkan ke dalam file <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-rose-600">src/App.tsx</code> sebagai URL default.</li>
-                </ol>
+            {/* Profile Widget */}
+            <div 
+              onClick={() => setShowProfileModal(true)}
+              className="flex items-center justify-between bg-slate-50 hover:bg-slate-100 p-3 rounded-xl border border-slate-200 shrink-0 cursor-pointer transition-colors group"
+              title="Klik untuk mengubah foto profil"
+            >
+              <div className="flex items-center gap-2.5">
+                {profilePics[currentUser.nama] ? (
+                  <img 
+                    src={profilePics[currentUser.nama]} 
+                    alt={currentUser.nama} 
+                    className="w-9 h-9 rounded-full object-cover border border-blue-200"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0000FE] font-black text-xs uppercase shrink-0">
+                    {currentUser.nama.substring(0, 2)}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h4 className="text-xs font-black text-slate-800 truncate leading-tight group-hover:text-[#0000FE] transition-colors">{currentUser.nama}</h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-semibold leading-none">
+                    {currentUser.role === 'ustadz' ? 'Wali Kelas / Guru' : 'Siswa / Wali Murid'}
+                  </p>
+                </div>
+              </div>
+              <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </div>
+
+            {/* Navigation vertical list */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase px-2">Menu Utama</span>
+              
+              <button
+                id="tab-rekap-btn"
+                onClick={() => { setActiveTab('rekap'); setShowConfig(false); }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
+                  activeTab === 'rekap'
+                    ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4 text-[#0000FE]" />
+                Rekap Penilaian Tahfizh
+              </button>
+
+              <button
+                id="tab-tugas-btn"
+                onClick={() => { setActiveTab('tugas'); setShowConfig(false); }}
+                className={`flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
+                  activeTab === 'tugas'
+                    ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <ClipboardList className="w-4 h-4 text-[#0000FE]" />
+                  <span>Tugas Harian</span>
+                </div>
+                {tugasHarian.length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-black ${
+                    activeTab === 'tugas' ? 'bg-[#0000FE] text-white' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {tugasHarian.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                id="tab-statistik-btn"
+                onClick={() => { setActiveTab('statistik'); setShowConfig(false); }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
+                  activeTab === 'statistik'
+                    ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4 text-[#0000FE]" />
+                Statistik & Grafik
+              </button>
+
+              <button
+                id="tab-capaian-ziyadah-btn"
+                onClick={() => { setActiveTab('capaian_ziyadah'); setShowConfig(false); }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
+                  activeTab === 'capaian_ziyadah'
+                    ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Award className="w-4 h-4 text-[#0000FE]" />
+                Capaian Target Ziyadah
+              </button>
+            </div>
+          </div>
+
+          {/* Sidebar Footer with Class Info & Log Out */}
+          <div className="flex flex-col gap-4 mt-auto">
+            {/* Class Information Plate */}
+            <div className="bg-slate-50 p-3.5 rounded-xl space-y-2.5 border border-slate-200">
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-black tracking-wider text-slate-400">INFORMASI KELAS</span>
+                <span className="bg-blue-50 border border-blue-100 text-[#0000FE] text-[9px] font-extrabold px-2 py-0.5 rounded">AL-WILDAN 10</span>
+              </div>
+              
+              <div className="space-y-1.5 text-[10px] text-slate-600 font-semibold leading-none">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Wali Kelas:</span>
+                  <span className="font-bold text-slate-800">Ustadz Syuja</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Tahun Ajaran:</span>
+                  <span className="font-bold text-slate-800">2026/2027</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sync / Refresh Button */}
+            <button
+              id="btn-sync-sidebar"
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 transition-all disabled:opacity-50 cursor-pointer"
+              title="Sinkronisasi Data"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#0000FE] ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Mengupdate...' : 'Sinkronkan Data'}</span>
+            </button>
+
+            {/* Log Out button at bottom */}
+            <button
+              id="btn-logout-sidebar"
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-50 active:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Keluar Sesi
+            </button>
+          </div>
+        </aside>
+
+        {/* Main scrollable content view */}
+        <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8 space-y-6">
+          
+          {/* Welcome Banner Hero */}
+          <div className="w-full bg-white text-slate-800 p-7 md:p-8 rounded-3xl border border-slate-200 shadow-xl shadow-blue-900/5 relative overflow-hidden flex flex-col justify-center space-y-2">
+            <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#0000FE_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
+            <span className="bg-blue-50 text-[#0000FE] text-[10px] font-extrabold tracking-widest px-3 py-1 rounded-full uppercase border border-blue-100 flex items-center gap-1.5 w-fit">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Portal Tahfizh Al-Wildan
+            </span>
+            <h2 className="text-xl md:text-2xl font-black tracking-wide text-[#0000FE]">
+              Ahlan wa Sahlan Abu/Ummu...
+            </h2>
+            <p className="text-slate-500 text-xs md:text-sm max-w-4xl leading-relaxed">
+              Pantau rekapitulasi evaluasi setoran hafalan (Tahsin, Ziyadah & Murojaah) ananda secara berkala dan terstruktur. Semua data tersinkronisasi langsung secara real-time dengan Google Sheets milik asatidzah.
+            </p>
+          </div>
+
+          {/* Spreadsheet Config Guide / Panel (Renders inside the main content view if toggled) */}
+          {showConfig && (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-blue-900/5 p-6 space-y-4 animate-in fade-in slide-in-from-top duration-300">
+              <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-5 h-5 text-[#0000FE]" />
+                    Panduan Hubungan Google Sheets
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">Ikuti langkah-langkah di bawah ini untuk menghubungkan aplikasi Anda ke spreadsheet real-time.</p>
+                </div>
+                <button
+                  onClick={() => setShowConfig(false)}
+                  className="text-slate-500 hover:text-rose-600 text-xs font-bold p-1 px-2.5 bg-slate-100 hover:bg-rose-50 rounded-lg transition-colors"
+                >
+                  Tutup
+                </button>
               </div>
 
-              <div className="space-y-3">
-                <h4 className="font-bold text-slate-800">2. Kode Google Apps Script Backend</h4>
-                <p className="text-slate-500">Salin kode di bawah ini untuk ditaruh di editor Apps Script Google Sheets Anda:</p>
-                <div className="relative">
-                  <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl overflow-x-auto text-[10px] max-h-52 font-mono whitespace-pre select-all">
-                    {GOOGLE_APPS_SCRIPT_CODE}
-                  </pre>
-                  <div className="absolute top-2 right-2">
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
-                        alert("Alhamdulillah, kode Apps Script berhasil disalin ke clipboard!");
-                      }}
-                      className="px-2.5 py-1 bg-[#0000FE] hover:bg-[#0000D0] text-white font-bold rounded-lg text-[10px] shadow-sm active:scale-95 transition-all cursor-pointer"
-                    >
-                      Salin Kode
-                    </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-600 leading-relaxed font-sans">
+                <div className="space-y-3">
+                  <h4 className="font-bold text-[#0000FE]">1. Langkah Penyusunan Spreadsheet</h4>
+                  <ol className="list-decimal pl-4 space-y-2 font-semibold">
+                    <li>Buat spreadsheet baru di Google Sheets.</li>
+                    <li>Beri nama tab pertama <strong className="text-slate-800">Penilaian</strong>, tab kedua <strong className="text-slate-800">Akun</strong>, and tab ketiga <strong className="text-slate-800">Tugas Harian</strong>.</li>
+                    <li>Masukkan header kolom persis sesuai panduan di file <code className="font-mono bg-slate-50 px-1 py-0.5 rounded text-[#0000FE]">src/data.ts</code>.</li>
+                    <li>Klik menu <strong>Ekstensi</strong> di baris atas Google Sheets, lalu pilih <strong>Apps Script</strong>.</li>
+                    <li>Tempel (Paste) seluruh kode Apps Script yang kami sediakan di tab sebelah ke dalam editor, lalu klik simpan.</li>
+                    <li>Klik tombol <strong>Terapkan</strong> (Deploy) &gt; <strong>Penerapan Baru</strong> (New Deployment). Pilih jenis penerapan <strong>Aplikasi Web</strong> (Web App). Konfigurasi: <i>Execute as: Me</i> dan <i>Who has access: Anyone</i>.</li>
+                    <li>Salin URL Aplikasi Web yang dihasilkan ke dalam file <code className="font-mono bg-slate-50 px-1 py-0.5 rounded text-[#0000FE]">src/App.tsx</code> sebagai URL default.</li>
+                  </ol>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-bold text-white">2. Kode Google Apps Script Backend</h4>
+                  <p className="text-slate-400">Salin kode di bawah ini untuk ditaruh di editor Apps Script Google Sheets Anda:</p>
+                  <div className="relative">
+                    <pre className="p-3 bg-slate-950 text-slate-100 rounded-xl overflow-x-auto text-[10px] max-h-52 font-mono whitespace-pre select-all">
+                      {GOOGLE_APPS_SCRIPT_CODE}
+                    </pre>
+                    <div className="absolute top-2 right-2">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
+                          alert("Alhamdulillah, kode Apps Script berhasil disalin ke clipboard!");
+                        }}
+                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-[10px] shadow-sm active:scale-95 transition-all cursor-pointer"
+                      >
+                        Salin Kode
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'rekap' && (
+          {/* Siswa Aktif Selector / Info */}
+          <div className="w-full bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl shadow-blue-900/5">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-blue-50 text-[#0000FE] border border-blue-100 shrink-0">
+                <UserCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  {currentUser.role === 'ustadz' ? 'Pengawasan & Penilaian Kelas' : 'Status Akun Terkunci'}
+                </h4>
+                <p className="text-xs text-slate-500">
+                  {currentUser.role === 'ustadz' 
+                    ? 'Anda memiliki hak akses penuh untuk melakukan penilaian dan memantau seluruh siswa.'
+                    : `Sesi terkunci pada nama ananda: ${currentUser.nama}. Hanya menampilkan data milik ananda.`}
+                </p>
+              </div>
+            </div>
+
+            {/* If Ustadz, show an indicator / select quick help */}
+            {currentUser.role === 'ustadz' && (
+              <div className="text-xs bg-emerald-50 text-emerald-700 font-bold px-3 py-1.5 rounded-lg border border-emerald-200 self-start sm:self-center">
+                Siswa Aktif: {dashboardStats.totalSiswa} orang
+              </div>
+            )}
+          </div>
+
+          {/* Stats Cards Section (Unified metrics display) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Card 1: Kehadiran Setoran */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xl shadow-blue-900/5 flex items-center gap-4">
+              <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Total Bimbingan</span>
+                <h3 className="text-2xl font-extrabold text-slate-900 my-0.5">{dashboardStats.totalSetoran} setoran</h3>
+                <span className="text-xs text-slate-500 font-medium">Log aktivitas terdaftar</span>
+              </div>
+            </div>
+
+            {/* Card 2: Kelancaran Hafalan */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xl shadow-blue-900/5 flex items-center gap-4">
+              <div className="p-4 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100 shrink-0">
+                <BookOpen className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Rata-rata Kelancaran</span>
+                <h3 className="text-2xl font-extrabold text-slate-900 my-0.5">{dashboardStats.lancarRate}%</h3>
+                <span className="text-xs text-emerald-600 font-semibold">Sangat Baik</span>
+              </div>
+            </div>
+
+            {/* Card 3: Rata-rata Nilai / Aktif Siswa */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xl shadow-blue-900/5 flex items-center gap-4">
+              <div className="p-4 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
+                <GraduationCap className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Informasi Grade</span>
+                <h3 className="text-2xl font-extrabold text-slate-900 my-0.5">AL-WILDAN 10</h3>
+                <span className="text-xs text-slate-500 font-medium">Tahun Ajaran Aktif</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Tab Content Panel */}
+          <div className="space-y-6">
+            {activeTab === 'rekap' && (
           <>
             {/* Content Bento Grid: Form & Student Table with search/filters */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Column 1: Input Assessment Form or Student Profile Progress Card */}
+           {/* Column 1: Input Assessment Form or Student Profile Progress Card */}
           <div className="lg:col-span-1 space-y-6">
             {currentUser.role === 'ustadz' ? (
               <NewAssessmentForm
@@ -1309,12 +1524,12 @@ export default function App() {
                 onCancelEdit={() => setEditingSetoran(null)}
               />
             ) : (
-              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-6">
+              <div className="bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6">
                 <div className="border-b border-slate-100 pb-5 text-center">
-                  <div className="inline-flex bg-blue-100 text-blue-800 p-4 rounded-full mb-3 border-4 border-blue-50">
+                  <div className="inline-flex bg-blue-50 text-[#0000FE] p-4 rounded-full mb-3 border-4 border-blue-100">
                     <UserCheck className="w-8 h-8 text-[#0000FE]" />
                   </div>
-                  <h3 className="text-xl font-extrabold text-slate-800">{currentUser.nama}</h3>
+                  <h3 className="text-xl font-extrabold text-slate-900">{currentUser.nama}</h3>
                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0000FE] border border-blue-100 mt-2 uppercase tracking-wider">
                     <Sparkles className="w-3 h-3 text-[#0000FE]" /> Akun Siswa Aktif
                   </span>
@@ -1323,23 +1538,23 @@ export default function App() {
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ringkasan Hafalan Anda</h4>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center">
-                      <span className="block text-2xl font-black text-slate-800">{dashboardStats.totalSetoran}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">Total Setoran</span>
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
+                      <span className="block text-2xl font-black text-slate-900">{dashboardStats.totalSetoran}</span>
+                      <span className="text-[10px] text-slate-500 font-bold">Total Setoran</span>
                     </div>
-                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center">
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
                       <span className="block text-2xl font-black text-[#0000FE]">{dashboardStats.lancarRate}%</span>
-                      <span className="text-[10px] text-slate-400 font-medium font-sans">Kelancaran</span>
+                      <span className="text-[10px] text-slate-500 font-bold font-sans">Kelancaran</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl space-y-2 text-xs text-blue-800">
-                  <h5 className="font-bold text-blue-900">Motivasi Hari Ini:</h5>
-                  <p className="italic leading-relaxed">
+                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl space-y-2 text-xs text-[#0000FE]">
+                  <h5 className="font-bold text-[#0000FE]">Motivasi Hari Ini:</h5>
+                  <p className="italic leading-relaxed text-slate-700">
                     "Sebaik-baik kalian adalah orang yang belajar Al-Qur'an dan mengajarkannya." (HR. Bukhari)
                   </p>
-                  <p className="leading-relaxed pt-2 border-t border-blue-100/30 text-[11px]">
+                  <p className="leading-relaxed pt-2 border-t border-blue-100 text-[11px] text-slate-500">
                     Tetap istiqomah dalam memelihara hafalanmu. Pastikan setiap bimbingan ustadz dicatat & dipelajari kembali dengan baik.
                   </p>
                 </div>
@@ -1348,13 +1563,13 @@ export default function App() {
           </div>
 
           {/* Column 2 & 3: Table and Filters */}
-          <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-6 flex flex-col justify-between">
+          <div className="lg:col-span-2 bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6 flex flex-col justify-between">
             
             {/* Table Control Header */}
             <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-4 gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 gap-3">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-800">Daftar Penilaian Siswa</h2>
+                  <h2 className="text-lg font-bold text-slate-900">Daftar Penilaian Siswa</h2>
                   <p className="text-xs text-slate-500">Mencakup rekapitulasi penilaian dan kelancaran siswa</p>
                 </div>
 
@@ -1366,7 +1581,7 @@ export default function App() {
                       id="btn-undo-header"
                       onClick={handleUndo}
                       disabled={isUndoing}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 rounded-xl text-xs font-bold text-rose-700 transition-all shadow-xs disabled:opacity-50 animate-pulse cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-bold text-rose-800 transition-all shadow-xs disabled:opacity-50 animate-pulse cursor-pointer"
                       title={`Urungkan aksi terakhir: ${
                         lastAction.type === 'add' ? 'Tambah Penilaian' : 
                         lastAction.type === 'edit' ? 'Ubah Penilaian' : 'Hapus Penilaian'
@@ -1382,21 +1597,21 @@ export default function App() {
                     id="btn-refresh-database-table"
                     onClick={handleManualSync}
                     disabled={isSyncing}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 rounded-xl text-xs font-bold text-slate-600 transition-all shadow-xs disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-xl text-xs font-bold text-slate-700 transition-all shadow-xs disabled:opacity-50 cursor-pointer"
                     title={usingDemoData ? "Refresh database contoh lokal" : "Sinkronisasi data ulang dengan Google Sheets"}
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${isSyncing ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 text-[#0000FE] ${isSyncing ? 'animate-spin' : ''}`} />
                     {isSyncing ? 'Refreshing...' : 'Refresh Database'}
                   </button>
 
                   {/* Display Mode Indicator */}
-                  <div className="text-xs font-semibold">
+                  <div className="text-xs font-bold">
                     {usingDemoData ? (
-                      <span className="px-2.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">
+                      <span className="px-2.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
                         Data Contoh
                       </span>
                     ) : (
-                      <span className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-[#0000FE] border border-blue-200">
+                      <span className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-[#0000FE] border border-blue-200 shadow-2xs">
                         Real-time Sheets
                       </span>
                     )}
@@ -1414,7 +1629,7 @@ export default function App() {
                   <input
                     id="search-students-input"
                     type="text"
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-800 rounded-xl bg-[#070D19] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-white placeholder-slate-500 font-medium"
                     placeholder="Cari nama / ID siswa..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1425,7 +1640,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-grade-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-800 rounded-xl bg-[#070D19] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-white font-semibold appearance-none cursor-pointer"
                     value={gradeFilter}
                     onChange={(e) => setGradeFilter(e.target.value)}
                   >
@@ -1443,7 +1658,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-activity-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-800 rounded-xl bg-[#070D19] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-white font-semibold appearance-none cursor-pointer"
                     value={kegiatanFilter}
                     onChange={(e) => setKegiatanFilter(e.target.value)}
                   >
@@ -1464,7 +1679,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-status-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-800 rounded-xl bg-[#070D19] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-white font-semibold appearance-none cursor-pointer"
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
                   >
@@ -1480,10 +1695,10 @@ export default function App() {
             </div>
 
             {/* Assessment Records Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-2xl mt-4">
+            <div className="overflow-x-auto border border-slate-800 rounded-2xl mt-4 bg-[#070D19]">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider">
+                  <tr className="bg-[#0b1322] text-slate-400 font-bold border-b border-slate-800 uppercase tracking-wider">
                     <th className="py-3 px-4 text-center">ID</th>
                     <th className="py-3 px-4">Grade</th>
                     <th className="py-3 px-4">Nama</th>
@@ -1497,10 +1712,10 @@ export default function App() {
                     {currentUser.role === 'ustadz' && <th className="py-3 px-4 text-center">Aksi</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-800/60">
                   {paginatedData.length === 0 ? (
                     <tr>
-                      <td colSpan={currentUser.role === 'ustadz' ? 11 : 10} className="py-12 text-center text-slate-400 italic font-medium">
+                      <td colSpan={currentUser.role === 'ustadz' ? 11 : 10} className="py-12 text-center text-slate-500 italic font-medium">
                         Tidak ada data penilaian yang cocok dengan filter pencarian
                       </td>
                     </tr>
@@ -1509,56 +1724,64 @@ export default function App() {
                       <tr 
                         key={idx} 
                         id={`assessment-row-${idx}`}
-                        className="hover:bg-slate-50/75 transition-colors group cursor-pointer"
+                        className="hover:bg-slate-800/30 transition-colors group cursor-pointer"
                         onClick={() => setSelectedStudentName(item.nama)}
                         title="Klik untuk melihat riwayat siswa"
                       >
-                        <td className="py-3 px-4 text-center font-mono text-[10px] text-slate-400 font-medium">{item.id}</td>
-                        <td className="py-3 px-4 font-semibold text-slate-600">{item.grade}</td>
+                        <td className="py-3 px-4 text-center font-mono text-[10px] text-slate-500 font-medium">{item.id}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-400">{item.grade}</td>
                         <td className="py-3 px-4">
                           <div className="flex items-center space-x-2.5">
-                            <div className="w-8 h-8 rounded-full bg-blue-50 text-[#0000FE] font-extrabold flex items-center justify-center border border-blue-100 uppercase shrink-0 text-xs">
-                              {item.nama.substring(0, 2)}
-                            </div>
-                            <div className="font-bold text-slate-800 flex items-center gap-1 group-hover:text-[#0000FE] transition-colors">
+                            {profilePics[item.nama] ? (
+                              <img 
+                                src={profilePics[item.nama]} 
+                                alt={item.nama} 
+                                className="w-8 h-8 rounded-full object-cover border border-blue-500/20 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-blue-950/40 text-blue-400 font-extrabold flex items-center justify-center border border-blue-900/40 uppercase shrink-0 text-xs">
+                                {item.nama.substring(0, 2)}
+                              </div>
+                            )}
+                            <div className="font-bold text-white flex items-center gap-1 group-hover:text-blue-400 transition-colors">
                               {item.nama}
-                              <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-[#0000FE] transition-opacity" />
+                              <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-blue-400 transition-opacity" />
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
+                        <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                           {formatTanggalIndo(item.tanggalSetoran)}
                         </td>
-                        <td className="py-3 px-4 font-semibold text-slate-700 truncate max-w-[140px]" title={item.surah}>
+                        <td className="py-3 px-4 font-semibold text-slate-300 truncate max-w-[140px]" title={item.surah}>
                           {item.surah || '-'}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             item.kegiatan === 'Ziyadah'
-                              ? 'bg-blue-50 text-[#0000FE] border border-blue-100'
+                              ? 'bg-blue-950/40 text-blue-400 border border-blue-900/40'
                               : item.kegiatan === 'Tahsin (Tilawah)'
-                              ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                              ? 'bg-blue-950/40 text-blue-400 border border-blue-900/30'
                               : item.kegiatan === "Tahsin (IQRA')"
-                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                              ? 'bg-indigo-950/40 text-indigo-300 border border-indigo-900/30'
                               : item.kegiatan === 'Tahsin (Qoidah)'
-                              ? 'bg-violet-50 text-violet-700 border-violet-100'
+                              ? 'bg-violet-950/40 text-violet-300 border-violet-900/30'
                               : item.kegiatan === 'Murojaah'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                              : 'bg-blue-50/70 text-blue-800 border border-blue-100'
+                              ? 'bg-amber-950/40 text-amber-300 border border-amber-900/30'
+                              : 'bg-blue-950/40 text-blue-400 border border-blue-900/30'
                           }`}>
                             {item.kegiatan}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center font-bold text-slate-700">{item.baris}</td>
-                        <td className="py-3 px-4 text-slate-500 max-w-[150px] truncate font-medium" title={item.ctt}>
+                        <td className="py-3 px-4 text-center font-bold text-white">{item.baris}</td>
+                        <td className="py-3 px-4 text-slate-400 max-w-[150px] truncate font-medium" title={item.ctt}>
                           {item.ctt || '-'}
                         </td>
-                        <td className="py-3 px-4 text-center font-semibold text-slate-500 capitalize whitespace-nowrap">{item.satuan || getSatuanByKegiatan(item.kegiatan)}</td>
+                        <td className="py-3 px-4 text-center font-semibold text-slate-400 capitalize whitespace-nowrap">{item.satuan || getSatuanByKegiatan(item.kegiatan)}</td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             item.status === 'Boleh Lanjut'
-                              ? 'bg-blue-50 text-[#0000FE] border border-blue-200'
-                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                              ? 'bg-blue-950/40 text-blue-400 border border-blue-900/40'
+                              : 'bg-rose-950/40 text-rose-300 border border-rose-900/40'
                           }`}>
                             {item.status}
                           </span>
@@ -1576,7 +1799,7 @@ export default function App() {
                                     formEl.scrollIntoView({ behavior: 'smooth' });
                                   }
                                 }}
-                                className="p-1.5 hover:bg-amber-50 text-slate-400 hover:text-amber-600 rounded-lg transition-colors border border-transparent hover:border-amber-200"
+                                className="p-1.5 hover:bg-amber-950/30 text-slate-500 hover:text-amber-400 rounded-lg transition-colors border border-transparent hover:border-amber-900/40"
                                 title="Edit Penilaian"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
@@ -1588,7 +1811,7 @@ export default function App() {
                                     e.stopPropagation();
                                     setConfirmDeleteRecord(item);
                                   }}
-                                  className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                                  className="p-1.5 hover:bg-rose-950/30 text-slate-500 hover:text-rose-400 rounded-lg transition-colors border border-transparent hover:border-rose-900/40"
                                   title="Hapus Penilaian"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1606,7 +1829,7 @@ export default function App() {
 
             {/* Table Pagination Controls */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-slate-200 pt-5 mt-4 text-xs font-semibold text-slate-500">
+              <div className="flex items-center justify-between border-t border-slate-800 pt-5 mt-4 text-xs font-semibold text-slate-400">
                 <span>
                   Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredSetoran.length)} dari {filteredSetoran.length} penilaian
                 </span>
@@ -1616,18 +1839,18 @@ export default function App() {
                     id="btn-prev-page"
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                    className="p-2 border border-slate-800 rounded-xl hover:bg-slate-800 bg-[#070D19] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span className="flex items-center px-3 py-1.5 bg-slate-100 rounded-xl text-slate-700">
+                  <span className="flex items-center px-3 py-1.5 bg-slate-800 rounded-xl text-slate-300">
                     Halaman {currentPage} dari {totalPages}
                   </span>
                   <button
                     id="btn-next-page"
                     disabled={currentPage === totalPages}
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                    className="p-2 border border-slate-800 rounded-xl hover:bg-slate-800 bg-[#070D19] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
                   >
                     <ChevronRightIcon className="w-4 h-4" />
                   </button>
@@ -1671,10 +1894,10 @@ export default function App() {
             </div>
 
             {/* Filter Row specifically for statistical analysis */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 gap-2">
+            <div className="bg-[#0b1322] rounded-3xl shadow-sm border border-slate-800 p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/60 pb-3 gap-2">
                 <div>
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Filter Analisis Statistik</h3>
+                  <h3 className="text-xs font-black text-white uppercase tracking-wider">Filter Analisis Statistik</h3>
                   <p className="text-[11px] text-slate-400">Atur filter di bawah untuk menyesuaikan data grafik dan pencapaian secara interaktif</p>
                 </div>
                 
@@ -1687,7 +1910,7 @@ export default function App() {
                       setKegiatanFilter('All');
                       setStatusFilter('All');
                     }}
-                    className="text-xs font-bold text-[#0000FE] hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-bold text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     Reset Semua Filter
                   </button>
@@ -1703,7 +1926,7 @@ export default function App() {
                   <input
                     id="search-stats-input"
                     type="text"
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-800 rounded-xl bg-[#070D19] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-white placeholder-slate-500 font-medium"
                     placeholder="Cari nama / ID siswa..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -1714,7 +1937,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-stats-grade-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-800 rounded-xl bg-[#070D19] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-white font-semibold appearance-none cursor-pointer"
                     value={gradeFilter}
                     onChange={(e) => setGradeFilter(e.target.value)}
                   >
@@ -1732,7 +1955,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-stats-activity-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-800 rounded-xl bg-[#070D19] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-white font-semibold appearance-none cursor-pointer"
                     value={kegiatanFilter}
                     onChange={(e) => setKegiatanFilter(e.target.value)}
                   >
@@ -1753,7 +1976,7 @@ export default function App() {
                 <div className="relative">
                   <select
                     id="filter-stats-status-select"
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none cursor-pointer"
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-slate-800 rounded-xl bg-[#070D19] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-white font-semibold appearance-none cursor-pointer"
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
                   >
@@ -1800,100 +2023,100 @@ export default function App() {
             </div>
 
             {/* Averages by activity card */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
+            <div className="bg-[#0b1322] rounded-3xl shadow-sm border border-slate-800 p-6 space-y-4">
               <div>
-                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-[#0000FE]" /> Rata-Rata Setoran per Jenis Kegiatan
+                <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-blue-400" /> Rata-Rata Setoran per Jenis Kegiatan
                 </h3>
                 <p className="text-[11px] text-slate-400">Rincian rata-rata baris atau halaman yang disetorkan berdasarkan kategori pembelajaran</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {/* 1. Ziyadah */}
-                <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                <div className="bg-emerald-950/20 border border-emerald-900/40 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Ziyadah</span>
-                    <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Ziyadah</span>
+                    <div className="p-2 bg-emerald-900/30 text-emerald-400 rounded-xl">
                       <Plus className="w-3.5 h-3.5" />
                     </div>
                   </div>
                   <div className="mt-4">
-                    <h4 className="text-2xl font-black text-emerald-950">
-                      {dashboardStats.avgZiyadah} <span className="text-xs font-bold text-emerald-700">baris</span>
+                    <h4 className="text-2xl font-black text-emerald-300">
+                      {dashboardStats.avgZiyadah} <span className="text-xs font-bold text-emerald-500">baris</span>
                     </h4>
-                    <p className="text-[10px] text-emerald-600 font-semibold mt-1">
+                    <p className="text-[10px] text-emerald-500 font-semibold mt-1">
                       {dashboardStats.ziyadahCount} setoran aktif
                     </p>
                   </div>
                 </div>
 
                 {/* 2. Murojaah */}
-                <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                <div className="bg-amber-950/20 border border-amber-900/40 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Murojaah</span>
-                    <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Murojaah</span>
+                    <div className="p-2 bg-amber-900/30 text-amber-400 rounded-xl">
                       <RefreshCw className="w-3.5 h-3.5" />
                     </div>
                   </div>
                   <div className="mt-4">
-                    <h4 className="text-2xl font-black text-amber-950">
-                      {dashboardStats.avgMurojaah} <span className="text-xs font-bold text-amber-700">hal</span>
+                    <h4 className="text-2xl font-black text-amber-300">
+                      {dashboardStats.avgMurojaah} <span className="text-xs font-bold text-amber-500">hal</span>
                     </h4>
-                    <p className="text-[10px] text-amber-600 font-semibold mt-1">
+                    <p className="text-[10px] text-amber-500 font-semibold mt-1">
                       {dashboardStats.murojaahCount} setoran aktif
                     </p>
                   </div>
                 </div>
 
                 {/* 3. Tahsin IQRA */}
-                <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                <div className="bg-blue-950/20 border border-blue-900/40 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Tahsin (IQRA')</span>
-                    <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Tahsin (IQRA')</span>
+                    <div className="p-2 bg-blue-900/30 text-blue-400 rounded-xl">
                       <GraduationCap className="w-3.5 h-3.5" />
                     </div>
                   </div>
                   <div className="mt-4">
-                    <h4 className="text-2xl font-black text-blue-950">
-                      {dashboardStats.avgTahsinIqra} <span className="text-xs font-bold text-blue-700">hal</span>
+                    <h4 className="text-2xl font-black text-blue-300">
+                      {dashboardStats.avgTahsinIqra} <span className="text-xs font-bold text-blue-500">hal</span>
                     </h4>
-                    <p className="text-[10px] text-blue-600 font-semibold mt-1">
+                    <p className="text-[10px] text-blue-500 font-semibold mt-1">
                       {dashboardStats.tahsinIqraCount} setoran aktif
                     </p>
                   </div>
                 </div>
 
                 {/* 4. Tahsin Qoidah */}
-                <div className="bg-purple-50/50 border border-purple-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                <div className="bg-purple-950/20 border border-purple-900/40 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider">Tahsin (Qoidah)</span>
-                    <div className="p-2 bg-purple-100 text-purple-700 rounded-xl">
+                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Tahsin (Qoidah)</span>
+                    <div className="p-2 bg-purple-900/30 text-purple-400 rounded-xl">
                       <Award className="w-3.5 h-3.5" />
                     </div>
                   </div>
                   <div className="mt-4">
-                    <h4 className="text-2xl font-black text-purple-950">
-                      {dashboardStats.avgTahsinQoidah} <span className="text-xs font-bold text-purple-700">hal</span>
+                    <h4 className="text-2xl font-black text-purple-300">
+                      {dashboardStats.avgTahsinQoidah} <span className="text-xs font-bold text-purple-500">hal</span>
                     </h4>
-                    <p className="text-[10px] text-purple-600 font-semibold mt-1">
+                    <p className="text-[10px] text-purple-500 font-semibold mt-1">
                       {dashboardStats.tahsinQoidahCount} setoran aktif
                     </p>
                   </div>
                 </div>
 
                 {/* 5. Tahsin Tilawah */}
-                <div className="bg-rose-50/50 border border-rose-100 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
+                <div className="bg-rose-950/20 border border-rose-900/40 rounded-2xl p-4 flex flex-col justify-between transition-all hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Tahsin (Tilawah)</span>
-                    <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">Tahsin (Tilawah)</span>
+                    <div className="p-2 bg-rose-900/30 text-rose-400 rounded-xl">
                       <Music className="w-3.5 h-3.5" />
                     </div>
                   </div>
                   <div className="mt-4">
-                    <h4 className="text-2xl font-black text-rose-950">
-                      {dashboardStats.avgTahsinTilawah} <span className="text-xs font-bold text-rose-700">hal</span>
+                    <h4 className="text-2xl font-black text-rose-300">
+                      {dashboardStats.avgTahsinTilawah} <span className="text-xs font-bold text-rose-500">hal</span>
                     </h4>
-                    <p className="text-[10px] text-rose-600 font-semibold mt-1">
+                    <p className="text-[10px] text-rose-500 font-semibold mt-1">
                       {dashboardStats.tahsinTilawahCount} setoran aktif
                     </p>
                   </div>
@@ -2036,7 +2259,7 @@ export default function App() {
                           <option value="All">Semua Kelas (All)</option>
                           <option value="2 Inter 1">2 Inter 1</option>
                           <option value="2 Inter 2">2 Inter 2</option>
-                          <option value="2 Inter 3">2 Inter 3</option>
+                          <option value="AL-WILDAN 10">AL-WILDAN 10</option>
                           <option value="1 Inter 1">1 Inter 1</option>
                           <option value="1 Inter 2">1 Inter 2</option>
                           <option value="3 Inter 1">3 Inter 1</option>
@@ -2217,7 +2440,7 @@ export default function App() {
                         <option value="All">Semua Grade/Kelas</option>
                         <option value="2 Inter 1">2 Inter 1</option>
                         <option value="2 Inter 2">2 Inter 2</option>
-                        <option value="2 Inter 3">2 Inter 3</option>
+                        <option value="AL-WILDAN 10">AL-WILDAN 10</option>
                         <option value="1 Inter 1">1 Inter 1</option>
                         <option value="1 Inter 2">1 Inter 2</option>
                         <option value="3 Inter 1">3 Inter 1</option>
@@ -2559,11 +2782,24 @@ export default function App() {
 
                       {/* Header row */}
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h3 className="text-sm font-extrabold text-slate-800 group-hover:text-[#0000FE] transition-colors">
-                            {item.nama}
-                          </h3>
-                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.grade}</span>
+                        <div className="flex items-center gap-2.5">
+                          {profilePics[item.nama] ? (
+                            <img 
+                              src={profilePics[item.nama]} 
+                              alt={item.nama} 
+                              className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-xs shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-black text-xs uppercase shrink-0">
+                              {item.nama.substring(0, 2)}
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="text-sm font-extrabold text-slate-800 group-hover:text-[#0000FE] transition-colors">
+                              {item.nama}
+                            </h3>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.grade}</span>
+                          </div>
                         </div>
                         <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border shrink-0 ${colorTheme.badge}`}>
                           {percentage}%
@@ -2607,7 +2843,10 @@ export default function App() {
           </div>
         )}
 
+          </div>
+
       </main>
+      </div>
 
       {/* Delete Confirmation Modal */}
       {confirmDeleteRecord && (
@@ -2752,6 +2991,18 @@ export default function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Profile & Logo Settings Modal */}
+      {showProfileModal && (
+        <ProfileSettingsModal
+          currentUser={currentUser}
+          profilePics={profilePics}
+          customLogo={customLogo}
+          onUpdateProfilePic={handleUpdateProfilePic}
+          onUpdateCustomLogo={handleUpdateCustomLogo}
+          onClose={() => setShowProfileModal(false)}
+        />
       )}
 
     </div>

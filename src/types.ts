@@ -41,7 +41,7 @@ export interface UserSession {
 export interface TugasHarian {
   id: string;
   tanggal: string; // YYYY-MM-DD
-  grade: string;   // e.g. "All", "2 Inter 3"
+  grade: string;   // e.g. "All", "AL-WILDAN 10"
   materi: string;  // e.g. "Murojaah Juz 30"
   ustadz: string;  // Name of assigner
   keterangan: string; // Additional instructions

@@ -7,12 +7,14 @@ interface StudentDetailModalProps {
   studentName: string;
   studentHistory: Setoran[];
   onClose: () => void;
+  profilePics?: Record<string, string>;
 }
 
 export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   studentName,
   studentHistory,
   onClose,
+  profilePics,
 }) => {
   if (studentHistory.length === 0) return null;
 
@@ -61,9 +63,17 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
           </button>
           
           <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-extrabold uppercase border-2 border-white/30">
-              {studentName.substring(0, 2)}
-            </div>
+            {profilePics && profilePics[studentName] ? (
+              <img 
+                src={profilePics[studentName]} 
+                alt={studentName} 
+                className="w-14 h-14 rounded-full object-cover border-2 border-white/40 shadow-sm"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-extrabold uppercase border-2 border-white/30">
+                {studentName.substring(0, 2)}
+              </div>
+            )}
             <div>
               <span className="text-[11px] font-extrabold tracking-wider bg-white/20 uppercase px-2.5 py-0.5 rounded-full">
                 SISWA #{studentId || 'N/A'}
