@@ -35,7 +35,7 @@ export interface UserAccount {
 export interface UserSession {
   id: string;
   nama: string;
-  role: 'ustadz' | 'siswa';
+  role: 'admin' | 'ustadz' | 'siswa';
 }
 
 export interface TugasHarian {

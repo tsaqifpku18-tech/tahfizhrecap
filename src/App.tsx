@@ -186,6 +186,22 @@ export const parseDateToTime = (dateStr: any): number => {
 };
 
 
+// Helper to dynamically normalize user role based on name
+const normalizeUserSession = (session: UserSession | null): UserSession | null => {
+  if (!session) return null;
+  const nameLower = (session.nama || '').toLowerCase();
+  let updatedRole = session.role;
+  if (nameLower.includes('admin')) {
+    updatedRole = 'admin';
+  } else if (nameLower.includes('ustadz')) {
+    updatedRole = 'ustadz';
+  }
+  if (updatedRole !== session.role) {
+    return { ...session, role: updatedRole };
+  }
+  return session;
+};
+
 export default function App() {
   // 1. Core States
   const [setoran, setSetoran] = useState<Setoran[]>(DEMO_SETORAN);
@@ -197,6 +213,15 @@ export default function App() {
   const [confirmDeleteTugas, setConfirmDeleteTugas] = useState<TugasHarian | null>(null);
   
   const [usingDemoData, setUsingDemoData] = useState<boolean>(true);
+  
+  // Capaian Target Ziyadah local edits and inline editing states
+  const [capaianLocalEdits, setCapaianLocalEdits] = useState<{ [key: string]: { capaian: number, target: number } }>(() => {
+    const saved = localStorage.getItem('capaian_local_edits');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [editingCapaianStudent, setEditingCapaianStudent] = useState<string | null>(null);
+  const [editCapaianValue, setEditCapaianValue] = useState<number>(0);
+  const [editTargetValue, setEditTargetValue] = useState<number>(0);
   
   // Tugas Harian Form state
   const [tugasFormTanggal, setTugasFormTanggal] = useState<string>(() => {
@@ -232,7 +257,7 @@ export default function App() {
     const savedSession = localStorage.getItem('tahfizh_user_session');
     if (savedSession) {
       try {
-        return JSON.parse(savedSession);
+        return normalizeUserSession(JSON.parse(savedSession));
       } catch (e) {
         console.error('Failed to parse user session', e);
       }
@@ -246,8 +271,9 @@ export default function App() {
   };
 
   const handleLoginSuccess = (session: UserSession) => {
-    setCurrentUser(session);
-    localStorage.setItem('tahfizh_user_session', JSON.stringify(session));
+    const normalized = normalizeUserSession(session);
+    setCurrentUser(normalized);
+    localStorage.setItem('tahfizh_user_session', JSON.stringify(normalized));
   };
 
   // Profile Picture States (Loaded from localStorage)
@@ -350,13 +376,30 @@ export default function App() {
     return ['All', ...Array.from(new Set(grades))];
   }, [setoran, currentUser]);
 
+  const mergedCapaianZiyadah = useMemo(() => {
+    return capaianZiyadah.map((item) => {
+      const key = item.nama.toLowerCase();
+      const localEdit = capaianLocalEdits[key];
+      if (localEdit) {
+        const percentage = localEdit.target > 0 ? Math.round((localEdit.capaian / localEdit.target) * 100) : 0;
+        return {
+          ...item,
+          capaian: localEdit.capaian,
+          target: localEdit.target,
+          persentase: percentage
+        };
+      }
+      return item;
+    });
+  }, [capaianZiyadah, capaianLocalEdits]);
+
   const uniqueCapaianGrades = useMemo(() => {
-    const grades = capaianZiyadah.map((c) => c.grade).filter(Boolean);
+    const grades = mergedCapaianZiyadah.map((c) => c.grade).filter(Boolean);
     return ['All', ...Array.from(new Set(grades))];
-  }, [capaianZiyadah]);
+  }, [mergedCapaianZiyadah]);
 
   const processedCapaianList = useMemo(() => {
-    let list = capaianZiyadah;
+    let list = mergedCapaianZiyadah;
     
     // If the logged in user is a student (role: 'siswa'), filter only their own data
     if (currentUser && currentUser.role === 'siswa') {
@@ -392,12 +435,12 @@ export default function App() {
       }
       return 0;
     });
-  }, [capaianZiyadah, capaianGradeFilter, capaianSearch, capaianSortBy, currentUser]);
+  }, [mergedCapaianZiyadah, capaianGradeFilter, capaianSearch, capaianSortBy, currentUser]);
 
   const capaianStats = useMemo(() => {
     const list = currentUser && currentUser.role === 'siswa'
-      ? capaianZiyadah.filter((item) => isStudentNameMatched(item.nama, currentUser.nama))
-      : capaianZiyadah;
+      ? mergedCapaianZiyadah.filter((item) => isStudentNameMatched(item.nama, currentUser.nama))
+      : mergedCapaianZiyadah;
 
     const total = list.length;
     if (total === 0) return { total: 0, avgPercentage: 0, reachedTarget: 0, highestPct: 0 };
@@ -421,7 +464,7 @@ export default function App() {
       reachedTarget: reached,
       highestPct: Math.round(maxPct),
     };
-  }, [capaianZiyadah, currentUser]);
+  }, [mergedCapaianZiyadah, currentUser]);
 
   // Fetch Tugas Harian data from Google Apps Script Web App
   const fetchTugasHarian = async (url: string): Promise<void> => {
@@ -1003,6 +1046,88 @@ export default function App() {
     });
   }, [setoran]);
 
+  // Helper to check if current logged-in ustadz/admin can edit/manage a student's data
+  const canCurrentUserEditStudent = (studentId: string | undefined, studentNama: string | undefined): boolean => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+    if (currentUser.role === 'ustadz') {
+      const sId = studentId || '';
+      const sNama = studentNama || '';
+      const sNamaLower = sNama.toLowerCase();
+
+      // Check if student's name contains 'ustadz' or 'admin'
+      if (sNamaLower.includes('ustadz') || sNamaLower.includes('admin')) {
+        return false;
+      }
+
+      // Must be in their halaqah list
+      // 1. Check by ID
+      if (sId && halaqahStudentIds.includes(sId)) {
+        return true;
+      }
+      
+      // 2. Also try to find ID from student name
+      const studentObj = activeStudentsList.find(s => isStudentNameMatched(s.nama, sNama));
+      if (studentObj && halaqahStudentIds.includes(studentObj.id)) {
+        return true;
+      }
+
+      // 3. Check by Name
+      const halaqahStudents = activeStudentsList.filter(s => halaqahStudentIds.includes(s.id));
+      if (sNama && halaqahStudents.some(s => isStudentNameMatched(s.nama, sNama))) {
+        return true;
+      }
+
+      return false;
+    }
+    return false;
+  };
+
+  // Helper to find which Ustadz selected a student as their halaqah member
+  const getUstadzForStudent = (studentId: string | undefined, studentNama: string | undefined): string | null => {
+    const sId = studentId || '';
+    const sNamaLower = (studentNama || '').toLowerCase();
+    
+    // Find the student object in activeStudentsList if studentId is missing
+    let targetId = sId;
+    if (!targetId && sNamaLower) {
+      const studentObj = activeStudentsList.find(s => (s.nama || '').toLowerCase() === sNamaLower);
+      if (studentObj) {
+        targetId = studentObj.id;
+      }
+    }
+
+    // Iterate localStorage to find who selected this student
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('halaqah_students_of_')) {
+        try {
+          const ustadzName = key.replace('halaqah_students_of_', '');
+          const selectedIds = JSON.parse(localStorage.getItem(key) || '[]');
+          
+          if (Array.isArray(selectedIds)) {
+            // Check if selected by ID
+            if (targetId && selectedIds.includes(targetId)) {
+              return ustadzName;
+            }
+            // Check by matching name inside the selected IDs
+            if (sNamaLower) {
+              const matchesByName = activeStudentsList.some(s => 
+                s.nama.toLowerCase() === sNamaLower && selectedIds.includes(s.id)
+              );
+              if (matchesByName) {
+                return ustadzName;
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error parsing halaqah students storage:", e);
+        }
+      }
+    }
+    return null;
+  };
+
   // 4. Filter logic
   const filteredSetoran = useMemo(() => {
     const halaqahStudentNames = activeStudentsList
@@ -1192,6 +1317,69 @@ export default function App() {
     };
   }, [filteredSetoran]);
 
+  const allowedStudentsForForm = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'admin') return activeStudentsList;
+    if (currentUser.role === 'ustadz') {
+      return activeStudentsList.filter(student => canCurrentUserEditStudent(student.id, student.nama));
+    }
+    return [];
+  }, [currentUser, activeStudentsList, halaqahStudentIds]);
+
+  const handleSaveCapaianEdit = async (studentName: string, capaian: number, target: number) => {
+    const key = studentName.toLowerCase();
+    const updatedEdits = {
+      ...capaianLocalEdits,
+      [key]: { capaian, target }
+    };
+    setCapaianLocalEdits(updatedEdits);
+    localStorage.setItem('capaian_local_edits', JSON.stringify(updatedEdits));
+    setEditingCapaianStudent(null);
+
+    // If connected to Google Sheets, send POST to persist in spreadsheet
+    if (!usingDemoData && settings.appsScriptUrl) {
+      setIsSyncing(true);
+      try {
+        const response = await fetch(settings.appsScriptUrl, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({
+            nama: studentName,
+            capaian,
+            target,
+            targetTab: 'capaian_ziyadah',
+            action: 'edit'
+          }),
+        });
+
+        const res = await response.json();
+        if (res && res.status === 'success') {
+          // Fetch the latest data to confirm synchronization
+          await fetchCapaianZiyadah(settings.appsScriptUrl);
+        } else {
+          console.warn('Gagal sinkronisasi ke Google Sheets:', res.message);
+        }
+      } catch (err) {
+        console.error('Error saving capaian to Sheets:', err);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+  };
+
+  const handleResetCapaianEdit = (studentName: string) => {
+    const key = studentName.toLowerCase();
+    const updatedEdits = { ...capaianLocalEdits };
+    delete updatedEdits[key];
+    setCapaianLocalEdits(updatedEdits);
+    localStorage.setItem('capaian_local_edits', JSON.stringify(updatedEdits));
+    setEditingCapaianStudent(null);
+  };
+
   // Pagination bounds
   const totalPages = Math.ceil(filteredSetoran.length / itemsPerPage);
   const paginatedData = useMemo(() => {
@@ -1310,22 +1498,31 @@ export default function App() {
             {/* Top toggle (Role display) */}
             <div className="bg-slate-100 p-1 rounded-xl flex items-center w-full gap-1 border border-slate-200 shrink-0">
               <div 
-                className={`w-1/2 text-center text-[11px] font-bold py-2 rounded-lg transition-all ${
+                className={`w-1/3 text-center text-[10px] font-bold py-2 rounded-lg transition-all ${
                   currentUser.role === 'siswa'
                     ? 'text-white bg-[#0000FE] shadow-xs font-black'
-                    : 'text-slate-400 cursor-not-allowed'
+                    : 'text-slate-400'
                 }`}
               >
-                Siswa (Viewer)
+                Siswa
               </div>
               <div 
-                className={`w-1/2 text-center text-[11px] font-bold py-2 rounded-lg transition-all ${
+                className={`w-1/3 text-center text-[10px] font-bold py-2 rounded-lg transition-all ${
                   currentUser.role === 'ustadz'
                     ? 'text-white bg-[#0000FE] shadow-xs font-black'
-                    : 'text-slate-400 cursor-not-allowed'
+                    : 'text-slate-400'
                 }`}
               >
-                Ustadz (Admin)
+                Ustadz
+              </div>
+              <div 
+                className={`w-1/3 text-center text-[10px] font-bold py-2 rounded-lg transition-all ${
+                  currentUser.role === 'admin'
+                    ? 'text-white bg-amber-500 shadow-xs font-black'
+                    : 'text-slate-400'
+                }`}
+              >
+                Admin
               </div>
             </div>
 
@@ -1349,8 +1546,16 @@ export default function App() {
                 )}
                 <div className="min-w-0">
                   <h4 className="text-xs font-black text-slate-800 truncate leading-tight group-hover:text-[#0000FE] transition-colors">{currentUser.nama}</h4>
-                  <p className="text-[10px] text-slate-500 mt-0.5 font-semibold leading-none">
-                    {currentUser.role === 'ustadz' ? "Guru Al-Qur'an" : 'Siswa / Wali Murid'}
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-semibold leading-normal">
+                    {currentUser.role === 'admin' 
+                      ? 'Administrator' 
+                      : currentUser.role === 'ustadz' 
+                      ? "Guru Al-Qur'an" 
+                      : (() => {
+                          const ustadzName = getUstadzForStudent(currentUser.id, currentUser.nama);
+                          return ustadzName ? `Guru Al-Qur'an: Ustadz ${ustadzName}` : 'Siswa / Wali Murid';
+                        })()
+                    }
                   </p>
                 </div>
               </div>
@@ -1551,18 +1756,20 @@ export default function App() {
               </div>
               <div>
                 <h4 className="text-sm font-extrabold text-slate-900">
-                  {currentUser.role === 'ustadz' ? 'Pengawasan & Penilaian Kelas' : 'Status Akun Terkunci'}
+                  {currentUser.role === 'admin' ? 'Pengawasan & Penilaian Kelas (Admin)' : currentUser.role === 'ustadz' ? 'Pengawasan & Penilaian Kelas' : 'Status Akun Terkunci'}
                 </h4>
                 <p className="text-xs text-slate-500">
-                  {currentUser.role === 'ustadz' 
+                  {currentUser.role === 'admin'
+                    ? 'Anda masuk sebagai Administrator dengan hak akses penuh untuk memantau dan mengedit seluruh siswa.'
+                    : currentUser.role === 'ustadz'
                     ? 'Anda memiliki hak akses penuh untuk melakukan penilaian dan memantau seluruh siswa.'
                     : `Sesi terkunci pada nama ananda: ${currentUser.nama}. Hanya menampilkan data milik ananda.`}
                 </p>
               </div>
             </div>
 
-            {/* If Ustadz, show an indicator / select quick help */}
-            {currentUser.role === 'ustadz' && (
+            {/* If Ustadz or Admin, show an indicator / select quick help */}
+            {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
               <div className="text-xs bg-emerald-50 text-emerald-700 font-bold px-3 py-1.5 rounded-lg border border-emerald-200 self-start sm:self-center">
                 Siswa Aktif: {dashboardStats.totalSiswa} orang
               </div>
@@ -1638,10 +1845,10 @@ export default function App() {
           
            {/* Column 1: Input Assessment Form or Student Profile Progress Card */}
           <div className="lg:col-span-1 space-y-6 order-2">
-            {currentUser.role === 'ustadz' ? (
+            {currentUser.role === 'ustadz' || currentUser.role === 'admin' ? (
               <NewAssessmentForm
                 onAddSetoran={handleAddSetoran}
-                activeStudents={activeStudentsList}
+                activeStudents={allowedStudentsForForm}
                 isSubmitting={isSubmitting}
                 editingRecord={editingSetoran}
                 onUpdateSetoran={handleUpdateSetoran}
@@ -1649,7 +1856,7 @@ export default function App() {
               />
             ) : (
               <div className="bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6">
-                <div className="border-b border-slate-100 pb-5 text-center">
+                <div className="border-b border-slate-100 pb-5 text-center flex flex-col items-center">
                   <div className="inline-flex bg-blue-50 text-[#0000FE] p-4 rounded-full mb-3 border-4 border-blue-100">
                     <UserCheck className="w-8 h-8 text-[#0000FE]" />
                   </div>
@@ -1657,6 +1864,15 @@ export default function App() {
                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0000FE] border border-blue-100 mt-2 uppercase tracking-wider">
                     <Sparkles className="w-3 h-3 text-[#0000FE]" /> Akun Siswa Aktif
                   </span>
+                  {(() => {
+                    const ustadzName = getUstadzForStudent(currentUser.id, currentUser.nama);
+                    return ustadzName ? (
+                      <div className="mt-3 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl inline-flex items-center gap-1.5 text-xs font-extrabold text-blue-700">
+                        <Users className="w-3.5 h-3.5 text-blue-500" />
+                        Guru Al-Qur'an: Ustadz {ustadzName}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
                 
                 <div className="space-y-4">
@@ -1699,8 +1915,8 @@ export default function App() {
 
                 {/* Action Controls & Display Mode Indicator */}
                 <div className="flex items-center gap-2.5 self-start sm:self-center">
-                  {/* Undo Button for Ustadz */}
-                  {currentUser && currentUser.role === 'ustadz' && lastAction && (
+                  {/* Undo Button for Ustadz/Admin */}
+                  {currentUser && (currentUser.role === 'ustadz' || currentUser.role === 'admin') && lastAction && (
                     <button
                       id="btn-undo-header"
                       onClick={handleUndo}
@@ -1836,13 +2052,13 @@ export default function App() {
                     <th className="py-3 px-4">Nilai</th>
                     <th className="py-3 px-4 text-center">Satuan</th>
                     <th className="py-3 px-4 text-center">Status</th>
-                    {currentUser.role === 'ustadz' && <th className="py-3 px-4 text-center">Aksi</th>}
+                    {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && <th className="py-3 px-4 text-center">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {paginatedData.length === 0 ? (
                     <tr>
-                      <td colSpan={currentUser.role === 'ustadz' ? 11 : 10} className="py-12 text-center text-slate-500 italic font-medium">
+                      <td colSpan={(currentUser.role === 'ustadz' || currentUser.role === 'admin') ? 11 : 10} className="py-12 text-center text-slate-500 italic font-medium">
                         Tidak ada data penilaian yang cocok dengan filter pencarian
                       </td>
                     </tr>
@@ -1913,36 +2129,40 @@ export default function App() {
                             {item.status}
                           </span>
                         </td>
-                        {currentUser.role === 'ustadz' && (
+                        {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
                           <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center space-x-1.5">
-                              <button
-                                id={`btn-edit-setoran-${item.id}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingSetoran(item);
-                                  const formEl = document.getElementById('new-assessment-form');
-                                  if (formEl) {
-                                    formEl.scrollIntoView({ behavior: 'smooth' });
-                                  }
-                                }}
-                                className="p-1.5 hover:bg-amber-950/30 text-slate-500 hover:text-amber-400 rounded-lg transition-colors border border-transparent hover:border-amber-900/40"
-                                title="Edit Penilaian"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              {currentUser?.role === 'ustadz' && (
-                                <button
-                                  id={`btn-delete-setoran-${item.id}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setConfirmDeleteRecord(item);
-                                  }}
-                                  className="p-1.5 hover:bg-rose-950/30 text-slate-500 hover:text-rose-400 rounded-lg transition-colors border border-transparent hover:border-rose-900/40"
-                                  title="Hapus Penilaian"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                              {currentUser && (currentUser.role === 'admin' || canCurrentUserEditStudent(undefined, item.nama)) ? (
+                                <>
+                                  <button
+                                    id={`btn-edit-setoran-${item.id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingSetoran(item);
+                                      const formEl = document.getElementById('new-assessment-form');
+                                      if (formEl) {
+                                        formEl.scrollIntoView({ behavior: 'smooth' });
+                                      }
+                                    }}
+                                    className="p-1.5 hover:bg-amber-950/30 text-slate-500 hover:text-amber-400 rounded-lg transition-colors border border-transparent hover:border-amber-900/40"
+                                    title="Edit Penilaian"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    id={`btn-delete-setoran-${item.id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setConfirmDeleteRecord(item);
+                                    }}
+                                    className="p-1.5 hover:bg-rose-950/30 text-slate-500 hover:text-rose-400 rounded-lg transition-colors border border-transparent hover:border-rose-900/40"
+                                    title="Hapus Penilaian"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <Lock className="w-3.5 h-3.5 text-slate-600 animate-pulse" title="Terkunci - Bukan siswa halaqah Anda" />
                               )}
                             </div>
                           </td>
@@ -2309,9 +2529,9 @@ export default function App() {
             {/* Sub content grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
-              {/* Form Column - Only for Ustadz, else Motivation card */}
+              {/* Form Column - Only for Ustadz/Admin, else Motivation card */}
               <div className="lg:col-span-1 space-y-6 order-2">
-                {currentUser?.role === 'ustadz' ? (
+                {currentUser?.role === 'ustadz' || currentUser?.role === 'admin' ? (
                   <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                       <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -2432,7 +2652,7 @@ export default function App() {
                           }}
                         >
                           <option value="All">Semua Siswa (All)</option>
-                          {activeStudentsList.map((st, idx) => (
+                          {(currentUser.role === 'admin' ? activeStudentsList : allowedStudentsForForm).map((st, idx) => (
                             <option key={`student-opt-${st.nama}-${idx}`} value={st.nama}>
                               {st.nama} {st.grade ? `(${st.grade})` : ''}
                             </option>
@@ -2667,42 +2887,46 @@ export default function App() {
                             })()}
                           </div>
  
-                          {/* Ustadz Controls */}
-                          {currentUser.role === 'ustadz' && (
+                          {/* Ustadz/Admin Controls */}
+                          {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
                             <div className="flex items-center gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => {
-                                  setEditingTugas(t);
-                                  setTugasFormTanggal(t.tanggal || '');
-                                  setTugasFormGrade(t.grade || 'All');
-                                  setTugasFormSiswa(t.siswa || 'All');
-                                  
-                                  const parsed = parseMateriField(t.materi);
-                                  setTugasFormZiyadah(parsed.ziyadah || '');
-                                  setTugasFormMurojaah(parsed.murojaah || '');
-                                  setTugasFormTugasMateri(parsed.tugasMateri || '');
-                                  setTugasFormMateri(t.materi || '');
-                                  
-                                  setTugasFormUstadz(t.ustadz || '');
-                                  setTugasFormKeterangan(t.keterangan || '');
-                                  const formEl = document.getElementById('tugas-form-container');
-                                  if (formEl) {
-                                    formEl.scrollIntoView({ behavior: 'smooth' });
-                                  }
-                                }}
-                                className="p-1.5 hover:bg-amber-50 text-slate-400 hover:text-amber-600 rounded-lg transition-colors border border-transparent hover:border-amber-200"
-                                title="Edit Tugas"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              {currentUser?.role === 'ustadz' && (
-                                <button
-                                  onClick={() => setConfirmDeleteTugas(t)}
-                                  className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
-                                  title="Hapus Tugas"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                              {currentUser && (currentUser.role === 'admin' || t.siswa === 'All' || canCurrentUserEditStudent(undefined, t.siswa)) ? (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setEditingTugas(t);
+                                      setTugasFormTanggal(t.tanggal || '');
+                                      setTugasFormGrade(t.grade || 'All');
+                                      setTugasFormSiswa(t.siswa || 'All');
+                                      
+                                      const parsed = parseMateriField(t.materi);
+                                      setTugasFormZiyadah(parsed.ziyadah || '');
+                                      setTugasFormMurojaah(parsed.murojaah || '');
+                                      setTugasFormTugasMateri(parsed.tugasMateri || '');
+                                      setTugasFormMateri(t.materi || '');
+                                      
+                                      setTugasFormUstadz(t.ustadz || '');
+                                      setTugasFormKeterangan(t.keterangan || '');
+                                      const formEl = document.getElementById('tugas-form-container');
+                                      if (formEl) {
+                                        formEl.scrollIntoView({ behavior: 'smooth' });
+                                      }
+                                    }}
+                                    className="p-1.5 hover:bg-amber-50 text-slate-400 hover:text-amber-600 rounded-lg transition-colors border border-transparent hover:border-amber-200"
+                                    title="Edit Tugas"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => setConfirmDeleteTugas(t)}
+                                    className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                                    title="Hapus Tugas"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <Lock className="w-3.5 h-3.5 text-slate-400" title="Terkunci - Bukan siswa halaqah Anda" />
                               )}
                             </div>
                           )}
@@ -2746,9 +2970,9 @@ export default function App() {
                     Pantau target hafalan (ziyadah) baris siswa dalam satu tahun secara presisi dan objektif.
                   </p>
                 </div>
-                {currentUser && currentUser.role === 'ustadz' && (
+                {currentUser && (currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
                   <span className="bg-white/20 text-white text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-wider border border-white/20">
-                    Mode Ustadz
+                    {currentUser.role === 'admin' ? 'Mode Administrator' : 'Mode Ustadz'}
                   </span>
                 )}
               </div>
@@ -2944,40 +3168,114 @@ export default function App() {
                             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.grade}</span>
                           </div>
                         </div>
-                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border shrink-0 ${colorTheme.badge}`}>
-                          {percentage}%
-                        </span>
-                      </div>
-
-                      {/* Visual Progress gauge */}
-                      <div className="mt-5 space-y-2">
-                        <div className="flex justify-between items-center text-[11px] font-semibold text-slate-500">
-                          <span className="flex items-center gap-1 font-sans">
-                            <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                            Capaian: <strong className="text-slate-700 font-extrabold">{item.capaian}</strong> baris
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${colorTheme.badge}`}>
+                            {percentage}%
                           </span>
-                          <span className="flex items-center gap-1 font-sans">
-                            <Target className="w-3.5 h-3.5 text-slate-400" />
-                            Target: <strong className="text-slate-700 font-extrabold">{item.target}</strong> baris
-                          </span>
-                        </div>
-
-                        {/* Progress Bar background and fill */}
-                        <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
-                          <div
-                            className={`h-full rounded-full transition-all duration-1000 ${colorTheme.bar}`}
-                            style={{ width: `${Math.min(percentage, 100)}%` }}
-                          />
+                          {currentUser && (currentUser.role === 'admin' || (currentUser.role === 'ustadz' && canCurrentUserEditStudent(item.id, item.nama))) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingCapaianStudent(item.nama);
+                                setEditCapaianValue(item.capaian);
+                                setEditTargetValue(item.target);
+                              }}
+                              className="p-1 hover:bg-slate-100 text-slate-400 hover:text-[#0000FE] rounded-lg transition-colors border border-transparent hover:border-slate-200"
+                              title="Edit Target & Capaian"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      {/* Bottom status badge */}
-                      <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-[10px] font-bold">
-                        <span className="text-slate-400 uppercase tracking-wider">Status Capaian:</span>
-                        <span className={`px-2 py-0.5 rounded-md ${colorTheme.bg} ${colorTheme.text} border text-[9px] font-black uppercase tracking-wide font-sans`}>
-                          {colorTheme.label}
-                        </span>
-                      </div>
+                      {editingCapaianStudent === item.nama ? (
+                        <div className="mt-4 p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Capaian (Baris)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editCapaianValue}
+                                onChange={(e) => setEditCapaianValue(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#0000FE]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Target (Baris)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editTargetValue}
+                                onChange={(e) => setEditTargetValue(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#0000FE]"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between gap-1.5 pt-1.5">
+                            {capaianLocalEdits[item.nama.toLowerCase()] ? (
+                              <button
+                                onClick={() => handleResetCapaianEdit(item.nama)}
+                                className="px-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[9px] py-1 font-bold flex items-center gap-1 transition-all border border-rose-100"
+                                title="Reset ke nilai default spreadsheet"
+                              >
+                                <RefreshCw className="w-2.5 h-2.5" />
+                                Reset
+                              </button>
+                            ) : (
+                              <div />
+                            )}
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => setEditingCapaianStudent(null)}
+                                className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-600 rounded-lg text-[9px] font-bold transition-all border border-slate-200"
+                              >
+                                Batal
+                              </button>
+                              <button
+                                onClick={() => handleSaveCapaianEdit(item.nama, editCapaianValue, editTargetValue)}
+                                className="px-2 py-1 bg-[#0000FE] hover:bg-blue-700 text-white rounded-lg text-[9px] font-bold transition-all shadow-2xs"
+                              >
+                                Simpan
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Visual Progress gauge */}
+                          <div className="mt-5 space-y-2">
+                            <div className="flex justify-between items-center text-[11px] font-semibold text-slate-500">
+                              <span className="flex items-center gap-1 font-sans">
+                                <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                                Capaian: <strong className="text-slate-700 font-extrabold">{item.capaian}</strong> baris
+                              </span>
+                              <span className="flex items-center gap-1 font-sans">
+                                <Target className="w-3.5 h-3.5 text-slate-400" />
+                                Target: <strong className="text-slate-700 font-extrabold">{item.target}</strong> baris
+                              </span>
+                            </div>
+
+                            {/* Progress Bar background and fill */}
+                            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
+                              <div
+                                className={`h-full rounded-full transition-all duration-1000 ${colorTheme.bar}`}
+                                style={{ width: `${Math.min(percentage, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Bottom status badge */}
+                          <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-[10px] font-bold">
+                            <span className="text-slate-400 uppercase tracking-wider">Status Capaian:</span>
+                            <span className={`px-2 py-0.5 rounded-md ${colorTheme.bg} ${colorTheme.text} border text-[9px] font-black uppercase tracking-wide font-sans`}>
+                              {colorTheme.label}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })
@@ -3101,7 +3399,7 @@ export default function App() {
       )}
 
       {/* Floating Undo Toast Notification */}
-      {showUndoToast && lastAction && currentUser && currentUser.role === 'ustadz' && (
+      {showUndoToast && lastAction && currentUser && (currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
         <div id="toast-undo" className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-xl border border-slate-800 flex items-center justify-between gap-6 max-w-sm animate-in slide-in-from-bottom duration-300">
           <div className="space-y-0.5">
             <p className="text-xs font-bold text-slate-100">

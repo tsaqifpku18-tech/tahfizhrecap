@@ -660,11 +660,121 @@ function doPost(e) {
         sheet = ss.insertSheet("Tugas Harian");
         sheet.appendRow(["ID", "Tanggal", "Grade", "Tugas Ziyadah", "Tugas Murojaah", "Tugas Materi", "Ustadz", "Keterangan", "Siswa"]);
       }
+    } else if (targetTab === "capaian_ziyadah" || targetTab === "capaian_target" || targetTab === "target_ziyadah" || targetTab === "capaiantargetziyadah") {
+      sheet = ss.getSheetByName("Capaian Target Ziyadah") || ss.getSheetByName("capaian_target_ziyadah") || ss.getSheetByName("Capaian Target") || ss.getSheetByName("capaian") || ss.getSheetByName("target");
+      if (!sheet) {
+        return createJsonResponse({ 
+          status: "error", 
+          message: "Sheet 'Capaian Target Ziyadah' tidak ditemukan. Harap buat sheet tersebut terlebih dahulu." 
+        });
+      }
     } else {
       sheet = ss.getSheetByName("Penilaian") || ss.getSheetByName("penilaian") || ss.getSheets()[0];
     }
     
     var action = postData.action || "create";
+    
+    // JIKA AKSI CAPAIAN TARGET ZIYADAH
+    if (targetTab === "capaian_ziyadah" || targetTab === "capaian_target" || targetTab === "target_ziyadah" || targetTab === "capaiantargetziyadah") {
+      var dataCapaian = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues();
+      if (dataCapaian.length <= 1) {
+        return createJsonResponse({ status: "error", message: "Data Capaian Target masih kosong." });
+      }
+      
+      var headersCapaian = dataCapaian[0];
+      var cNamaIdx = -1;
+      var cCapaianIdx = -1;
+      var cTargetIdx = -1;
+      var cPersenIdx = -1;
+      
+      for (var h = 0; h < headersCapaian.length; h++) {
+        var headerStr = String(headersCapaian[h]).toLowerCase().trim();
+        if (headerStr === "nama" || headerStr === "nama siswa" || headerStr === "siswa") {
+          cNamaIdx = h;
+        } else if (headerStr === "capaian") {
+          cCapaianIdx = h;
+        } else if (headerStr === "target") {
+          cTargetIdx = h;
+        } else if (headerStr === "persentase" || headerStr === "persen" || headerStr === "percentage") {
+          cPersenIdx = h;
+        }
+      }
+      
+      // Looser fallback matching for incomplete or combined headers
+      for (var h = 0; h < headersCapaian.length; h++) {
+        var headerStr = String(headersCapaian[h]).toLowerCase().trim();
+        if (cPersenIdx === -1 && (headerStr.indexOf("persen") !== -1 || headerStr.indexOf("percentage") !== -1 || headerStr.indexOf("kecapaian") !== -1)) {
+          cPersenIdx = h;
+        }
+        if (cTargetIdx === -1 && headerStr.indexOf("target") !== -1 && headerStr.indexOf("persen") === -1 && headerStr.indexOf("kecapaian") === -1) {
+          cTargetIdx = h;
+        }
+        if (cCapaianIdx === -1 && headerStr.indexOf("capaian") !== -1 && headerStr.indexOf("persen") === -1 && headerStr.indexOf("kecapaian") === -1) {
+          cCapaianIdx = h;
+        }
+      }
+      
+      if (cNamaIdx === -1) cNamaIdx = 0;
+      if (cCapaianIdx === -1) cCapaianIdx = 2;
+      if (cTargetIdx === -1) cTargetIdx = 3;
+      
+      var nameToFind = String(postData.nama || "").toLowerCase().trim();
+      var foundRow = -1;
+      for (var i = 1; i < dataCapaian.length; i++) {
+        if (String(dataCapaian[i][cNamaIdx]).toLowerCase().trim() === nameToFind) {
+          foundRow = i + 1;
+          break;
+        }
+      }
+      
+      if (foundRow !== -1) {
+        if (action === "edit") {
+          var cap = Number(postData.capaian || 0);
+          var tar = Number(postData.target || 0);
+          
+          if (cCapaianIdx !== -1) {
+            sheet.getRange(foundRow, cCapaianIdx + 1).setValue(cap);
+          }
+          if (cTargetIdx !== -1) {
+            sheet.getRange(foundRow, cTargetIdx + 1).setValue(tar);
+          }
+          if (cPersenIdx !== -1) {
+            var pct = tar > 0 ? (cap / tar) : 0;
+            sheet.getRange(foundRow, cPersenIdx + 1).setValue(pct);
+          }
+          
+          return createJsonResponse({ 
+            status: "success", 
+            message: "Alhamdulillah, capaian target ziyadah berhasil diperbarui di Google Sheets." 
+          });
+        }
+      } else {
+        if (action === "edit" || action === "create") {
+          var rowData = [];
+          var maxIdx = Math.max(cNamaIdx, cCapaianIdx, cTargetIdx, cPersenIdx);
+          if (maxIdx < 4) maxIdx = 4;
+          for (var k = 0; k <= maxIdx; k++) {
+            rowData.push("");
+          }
+          rowData[cNamaIdx] = String(postData.nama || "");
+          rowData[cCapaianIdx] = Number(postData.capaian || 0);
+          rowData[cTargetIdx] = Number(postData.target || 0);
+          if (cPersenIdx !== -1) {
+            var tar = Number(postData.target || 0);
+            rowData[cPersenIdx] = tar > 0 ? (Number(postData.capaian || 0) / tar) : 0;
+          }
+          sheet.appendRow(rowData);
+          return createJsonResponse({ 
+            status: "success", 
+            message: "Alhamdulillah, siswa baru dan capaian target ziyadah berhasil ditambahkan ke Google Sheets." 
+          });
+        }
+        return createJsonResponse({ 
+          status: "error", 
+          message: "Data siswa '" + postData.nama + "' tidak ditemukan di Capaian Target Ziyadah." 
+        });
+      }
+    }
     
     // JIKA AKSI TUGAS HARIAN
     if (targetTab === "tugas" || targetTab === "tugas_harian" || targetTab === "tugasharian") {

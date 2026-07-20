@@ -95,12 +95,21 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
       );
 
       if (account) {
-        // Determine role based on ID containing "ustadz" (case-insensitive)
-        const isUstadz = enteredId.includes('ustadz');
+        // Determine role based on name or ID
+        const namaLower = (account.nama || '').toLowerCase();
+        let finalRole: 'admin' | 'ustadz' | 'siswa' = 'siswa';
+        if (namaLower.includes('admin')) {
+          finalRole = 'admin';
+        } else if (namaLower.includes('ustadz')) {
+          finalRole = 'ustadz';
+        } else if (enteredId.includes('ustadz')) {
+          finalRole = 'ustadz';
+        }
+
         const session: UserSession = {
           id: account.id,
           nama: account.nama, // "namaa" column
-          role: isUstadz ? 'ustadz' : 'siswa',
+          role: finalRole,
         };
 
         setIsLoading(false);
