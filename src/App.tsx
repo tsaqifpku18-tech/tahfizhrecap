@@ -309,9 +309,27 @@ export default function App() {
 
   // 2. Filter States
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [tugasSearchQuery, setTugasSearchQuery] = useState<string>('');
   const [gradeFilter, setGradeFilter] = useState<string>('All');
   const [kegiatanFilter, setKegiatanFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+
+  const [halaqahStudentIds, setHalaqahStudentIds] = useState<string[]>(() => {
+    if (currentUser && currentUser.role === 'ustadz') {
+      const saved = localStorage.getItem(`halaqah_students_of_${currentUser.nama}`);
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    if (currentUser && currentUser.role === 'ustadz') {
+      const saved = localStorage.getItem(`halaqah_students_of_${currentUser.nama}`);
+      setHalaqahStudentIds(saved ? JSON.parse(saved) : []);
+    } else {
+      setHalaqahStudentIds([]);
+    }
+  }, [currentUser]);
 
   // Capaian Ziyadah Target States
   const [capaianSearch, setCapaianSearch] = useState<string>('');
@@ -964,8 +982,33 @@ export default function App() {
     }
   };
 
+  // List of active students with ID & Grade for dropdown auto-population
+  const activeStudentsList = useMemo(() => {
+    const map: { [key: string]: { id: string; nama: string; grade: string } } = {};
+    setoran.forEach((s) => {
+      if (s.nama && !map[(s.nama || '').toLowerCase()]) {
+        map[(s.nama || '').toLowerCase()] = {
+          id: s.id || '',
+          nama: s.nama,
+          grade: s.grade || '',
+        };
+      }
+    });
+    return Object.values(map).sort((a, b) => {
+      const gradeA = a.grade || '';
+      const gradeB = b.grade || '';
+      const gradeCompare = gradeA.localeCompare(gradeB);
+      if (gradeCompare !== 0) return gradeCompare;
+      return (a.nama || '').localeCompare(b.nama || '');
+    });
+  }, [setoran]);
+
   // 4. Filter logic
   const filteredSetoran = useMemo(() => {
+    const halaqahStudentNames = activeStudentsList
+      .filter(s => halaqahStudentIds.includes(s.id))
+      .map(s => s.nama.toLowerCase());
+
     return setoran.filter((item) => {
       const isStudent = currentUser && currentUser.role === 'siswa';
       if (isStudent && !isStudentNameMatched(item.nama, currentUser.nama)) {
@@ -974,7 +1017,16 @@ export default function App() {
 
       const matchesSearch = (item.nama || '').toLowerCase().includes((searchQuery || '').toLowerCase()) || 
                             (item.id || '').toLowerCase().includes((searchQuery || '').toLowerCase());
-      const matchesGrade = gradeFilter === 'All' || item.grade === gradeFilter;
+      
+      let matchesGrade = true;
+      if (gradeFilter === 'halaqah_saya') {
+        const itemId = item.id || '';
+        const itemNama = (item.nama || '').toLowerCase();
+        matchesGrade = halaqahStudentIds.includes(itemId) || halaqahStudentNames.includes(itemNama);
+      } else {
+        matchesGrade = gradeFilter === 'All' || item.grade === gradeFilter;
+      }
+
       const matchesKegiatan = kegiatanFilter === 'All' || 
                               (kegiatanFilter === 'Tahsin'
                                 ? item.kegiatan === 'Tahsin' || (item.kegiatan || '').toLowerCase().includes('tahsin (')
@@ -983,9 +1035,13 @@ export default function App() {
       
       return matchesSearch && matchesGrade && matchesKegiatan && matchesStatus;
     });
-  }, [setoran, searchQuery, gradeFilter, kegiatanFilter, statusFilter, currentUser]);
+  }, [setoran, searchQuery, gradeFilter, halaqahStudentIds, activeStudentsList, kegiatanFilter, statusFilter, currentUser]);
 
   const filteredTugasHarian = useMemo(() => {
+    const halaqahStudentNames = activeStudentsList
+      .filter(s => halaqahStudentIds.includes(s.id))
+      .map(s => s.nama.toLowerCase());
+
     return tugasHarian.filter((t) => {
       const isStudent = currentUser && currentUser.role === 'siswa';
       
@@ -999,12 +1055,26 @@ export default function App() {
         }
       }
 
-      const matchesSearch = (t.materi || '').toLowerCase().includes((searchQuery || '').toLowerCase()) || 
-                            (t.ustadz || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
-                            (t.keterangan || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
-                            (t.siswa || '').toLowerCase().includes((searchQuery || '').toLowerCase());
+      const matchesSearch = (t.materi || '').toLowerCase().includes((tugasSearchQuery || '').toLowerCase()) || 
+                            (t.ustadz || '').toLowerCase().includes((tugasSearchQuery || '').toLowerCase()) ||
+                            (t.keterangan || '').toLowerCase().includes((tugasSearchQuery || '').toLowerCase()) ||
+                            (t.siswa || '').toLowerCase().includes((tugasSearchQuery || '').toLowerCase());
                              
-      let matchesGrade = gradeFilter === 'All' || t.grade === 'All' || t.grade === gradeFilter;
+      let matchesGrade = true;
+      if (gradeFilter === 'halaqah_saya') {
+        if (t.siswa && t.siswa !== 'All') {
+          const tSiswaLower = (t.siswa || '').toLowerCase();
+          const studentObj = activeStudentsList.find((st) => isStudentNameMatched(st.nama, t.siswa || ''));
+          matchesGrade = (studentObj && halaqahStudentIds.includes(studentObj.id)) || halaqahStudentNames.includes(tSiswaLower);
+        } else {
+          const halaqahGrades = activeStudentsList
+            .filter((st) => halaqahStudentIds.includes(st.id))
+            .map((st) => st.grade);
+          matchesGrade = t.grade === 'All' || halaqahGrades.includes(t.grade);
+        }
+      } else {
+        matchesGrade = gradeFilter === 'All' || t.grade === 'All' || t.grade === gradeFilter;
+      }
       
       // For student view, if grade filter is 'All', they should see tasks for 'All' or their own grade
       if (isStudent && gradeFilter === 'All' && studentGrade) {
@@ -1023,7 +1093,7 @@ export default function App() {
 
       return matchesSearch && matchesGrade;
     });
-  }, [tugasHarian, searchQuery, gradeFilter, setoran, currentUser]);
+  }, [tugasHarian, tugasSearchQuery, gradeFilter, halaqahStudentIds, activeStudentsList, setoran, currentUser]);
 
   // Selected Student Drill-down History
   const studentHistory = useMemo(() => {
@@ -1062,21 +1132,6 @@ export default function App() {
       return tugasHarian.indexOf(b) - tugasHarian.indexOf(a);
     })[0];
   }, [tugasHarian, currentUser]);
-
-  // List of active students with ID & Grade for dropdown auto-population
-  const activeStudentsList = useMemo(() => {
-    const map: { [key: string]: { id: string; nama: string; grade: string } } = {};
-    setoran.forEach((s) => {
-      if (s.nama && !map[(s.nama || '').toLowerCase()]) {
-        map[(s.nama || '').toLowerCase()] = {
-          id: s.id || '',
-          nama: s.nama,
-          grade: s.grade || '',
-        };
-      }
-    });
-    return Object.values(map).sort((a, b) => (a.nama || '').localeCompare(b.nama || ''));
-  }, [setoran]);
 
   // Stats Calculations for Dashboard overview widgets
   const dashboardStats = useMemo(() => {
@@ -1714,6 +1769,9 @@ export default function App() {
                     onChange={(e) => setGradeFilter(e.target.value)}
                   >
                     <option value="All">Semua Grade</option>
+                    {currentUser && currentUser.role === 'ustadz' && (
+                      <option value="halaqah_saya">⭐ Siswa Halaqah Saya</option>
+                    )}
                     {uniqueGrades.filter(g => g !== 'All').map((g, idx) => (
                       <option key={`filter-grade-${g}-${idx}`} value={g}>{g}</option>
                     ))}
@@ -2347,13 +2405,9 @@ export default function App() {
                           onChange={(e) => setTugasFormGrade(e.target.value)}
                         >
                           <option value="All">Semua Kelas (All)</option>
-                          <option value="2 Inter 1">2 Inter 1</option>
-                          <option value="2 Inter 2">2 Inter 2</option>
-                          <option value="AL-WILDAN 10">AL-WILDAN 10</option>
-                          <option value="1 Inter 1">1 Inter 1</option>
-                          <option value="1 Inter 2">1 Inter 2</option>
-                          <option value="3 Inter 1">3 Inter 1</option>
-                          <option value="3 Inter 2">3 Inter 2</option>
+                          {uniqueGrades.filter(g => g !== 'All' && g !== 'halaqah_saya').map((g, idx) => (
+                            <option key={`tugas-form-grade-${g}-${idx}`} value={g}>{g}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -2513,28 +2567,27 @@ export default function App() {
                     </span>
                     <input
                       type="text"
-                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700"
-                      placeholder="Cari materi / ustadz..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
+                      placeholder="Cari materi, ustadz, atau siswa..."
+                      value={tugasSearchQuery}
+                      onChange={(e) => setTugasSearchQuery(e.target.value)}
                     />
                   </div>
 
                   <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <div className="relative w-full sm:w-40">
+                    <div className="relative w-full sm:w-48">
                       <select
-                        className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 appearance-none cursor-pointer"
+                        className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 appearance-none cursor-pointer font-bold"
                         value={gradeFilter}
                         onChange={(e) => setGradeFilter(e.target.value)}
                       >
                         <option value="All">Semua Grade/Kelas</option>
-                        <option value="2 Inter 1">2 Inter 1</option>
-                        <option value="2 Inter 2">2 Inter 2</option>
-                        <option value="AL-WILDAN 10">AL-WILDAN 10</option>
-                        <option value="1 Inter 1">1 Inter 1</option>
-                        <option value="1 Inter 2">1 Inter 2</option>
-                        <option value="3 Inter 1">3 Inter 1</option>
-                        <option value="3 Inter 2">3 Inter 2</option>
+                        {currentUser && currentUser.role === 'ustadz' && (
+                          <option value="halaqah_saya">⭐ Siswa Halaqah Saya</option>
+                        )}
+                        {uniqueGrades.filter(g => g !== 'All').map((g, idx) => (
+                          <option key={`tugas-filter-grade-${g}-${idx}`} value={g}>{g}</option>
+                        ))}
                       </select>
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                         <Filter className="w-3 h-3" />
@@ -3269,6 +3322,9 @@ export default function App() {
           onUpdateProfilePic={handleUpdateProfilePic}
           onUpdateCustomLogo={handleUpdateCustomLogo}
           onClose={() => setShowProfileModal(false)}
+          setoran={setoran}
+          activeStudents={activeStudentsList}
+          onUpdateHalaqahStudents={(ids) => setHalaqahStudentIds(ids)}
         />
       )}
 
