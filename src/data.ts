@@ -269,12 +269,14 @@ function doGet(e) {
     var idIdx = 0;
     var namaaIdx = 1;
     var passIdx = 2;
+    var gmailIdx = -1;
     
     for (var h = 0; h < headers.length; h++) {
       var headerStr = String(headers[h]).toLowerCase().trim();
       if (headerStr === "id" || headerStr === "id pengguna") idIdx = h;
       else if (headerStr === "namaa" || headerStr === "nama" || headerStr === "profil") namaaIdx = h;
       else if (headerStr === "password" || headerStr === "sandi" || headerStr === "pass") passIdx = h;
+      else if (headerStr === "gmail" || headerStr === "akun g-mail" || headerStr === "akun gmail" || headerStr === "email") gmailIdx = h;
     }
     
     var accounts = [];
@@ -284,7 +286,8 @@ function doGet(e) {
       accounts.push({
         id: normalizeId(row[idIdx]),
         nama: String(row[namaaIdx] !== undefined ? row[namaaIdx] : "").trim(),
-        password: String(row[passIdx] !== undefined ? row[passIdx] : "").trim()
+        password: String(row[passIdx] !== undefined ? row[passIdx] : "").trim(),
+        gmail: gmailIdx !== -1 && row[gmailIdx] !== undefined ? String(row[gmailIdx]).trim() : ""
       });
     }
     return createJsonResponse({ status: "success", data: accounts });
@@ -668,11 +671,76 @@ function doPost(e) {
           message: "Sheet 'Capaian Target Ziyadah' tidak ditemukan. Harap buat sheet tersebut terlebih dahulu." 
         });
       }
+    } else if (targetTab === "akun" || targetTab === "get_accounts") {
+      sheet = ss.getSheetByName("Akun") || ss.getSheetByName("akun") || ss.getSheetByName("AKUN");
+      if (!sheet) {
+        return createJsonResponse({ 
+          status: "error", 
+          message: "Sheet 'Akun' tidak ditemukan." 
+        });
+      }
     } else {
       sheet = ss.getSheetByName("Penilaian") || ss.getSheetByName("penilaian") || ss.getSheets()[0];
     }
     
     var action = postData.action || "create";
+    
+    // JIKA AKSI UPDATE AKUN (G-MAIL)
+    if (targetTab === "akun" || targetTab === "get_accounts") {
+      var idToFind = String(postData.id || "").trim();
+      var foundRow = findRowById(sheet, idToFind);
+      
+      if (foundRow === -1) {
+        // Coba cari berdasarkan nama
+        var nameToFind = String(postData.nama || "").toLowerCase().trim();
+        var dataAkun = sheet.getDataRange().getValues();
+        var headersAkun = dataAkun[0];
+        var namaaIdx = 1;
+        for (var h = 0; h < headersAkun.length; h++) {
+          var headerStr = String(headersAkun[h]).toLowerCase().trim();
+          if (headerStr === "namaa" || headerStr === "nama" || headerStr === "profil") {
+            namaaIdx = h;
+            break;
+          }
+        }
+        for (var i = 1; i < dataAkun.length; i++) {
+          if (String(dataAkun[i][namaaIdx]).toLowerCase().trim() === nameToFind) {
+            foundRow = i + 1;
+            break;
+          }
+        }
+      }
+      
+      if (foundRow !== -1) {
+        var dataAkun = sheet.getDataRange().getValues();
+        var headersAkun = dataAkun[0];
+        var gmailIdx = -1;
+        for (var h = 0; h < headersAkun.length; h++) {
+          var headerStr = String(headersAkun[h]).toLowerCase().trim();
+          if (headerStr === "gmail" || headerStr === "akun g-mail" || headerStr === "akun gmail" || headerStr === "email") {
+            gmailIdx = h;
+            break;
+          }
+        }
+        
+        if (gmailIdx === -1) {
+          // Tambah kolom Akun G-Mail jika belum ada
+          gmailIdx = headersAkun.length;
+          sheet.getRange(1, gmailIdx + 1).setValue("Akun G-Mail");
+        }
+        
+        sheet.getRange(foundRow, gmailIdx + 1).setValue(String(postData.gmail || "").trim());
+        return createJsonResponse({
+          status: "success",
+          message: "Alhamdulillah, Akun G-Mail berhasil disimpan ke Google Sheets."
+        });
+      } else {
+        return createJsonResponse({
+          status: "error",
+          message: "Data akun tidak ditemukan."
+        });
+      }
+    }
     
     // JIKA AKSI CAPAIAN TARGET ZIYADAH
     if (targetTab === "capaian_ziyadah" || targetTab === "capaian_target" || targetTab === "target_ziyadah" || targetTab === "capaiantargetziyadah") {
@@ -1266,6 +1334,7 @@ export const APPS_SCRIPT_INSTRUCTIONS = `### Cara Menghubungkan Google Sheet And
      * **Kolom A:** \`ID\` (Jika mengandung kata 'Ustadz', misal: 'ustadz_ahmad', maka dapat melihat semua data. Jika tidak, hanya melihat data dirinya sendiri)
      * **Kolom B:** \`Namaa\` (Untuk profil siswa / ustadz)
      * **Kolom C:** \`Password\` (Sandi login siswa / ustadz)
+     * **Kolom D:** \`Akun G-Mail\` (Opsional, kolom pengisian Akun G-Mail)
    * **Tab ke-3 bernama "Tugas Harian"** (atau "tugas_harian") dengan header kolom sebagai berikut:
      * **Kolom A:** \`ID\`
      * **Kolom B:** \`Tanggal\` (Format: yyyy-mm-dd atau dd/mmmm/yyyy)

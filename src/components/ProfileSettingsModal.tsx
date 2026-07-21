@@ -9,9 +9,11 @@ import { getSatuanByKegiatan } from '../data';
 interface ProfileSettingsModalProps {
   currentUser: UserSession;
   profilePics: Record<string, string>;
+  gmailAccounts: Record<string, string>;
   customLogo: string;
   onUpdateProfilePic: (name: string, dataUrl: string) => void;
   onUpdateCustomLogo: (dataUrl: string) => void;
+  onUpdateGmail?: (name: string, gmail: string) => void;
   onClose: () => void;
   setoran: Setoran[];
   activeStudents: { id: string; nama: string; grade: string }[];
@@ -21,9 +23,11 @@ interface ProfileSettingsModalProps {
 export function ProfileSettingsModal({
   currentUser,
   profilePics,
+  gmailAccounts,
   customLogo,
   onUpdateProfilePic,
   onUpdateCustomLogo,
+  onUpdateGmail,
   onClose,
   setoran,
   activeStudents,
@@ -41,6 +45,9 @@ export function ProfileSettingsModal({
   );
   const [isProfileDragging, setIsProfileDragging] = useState(false);
   const [profileError, setProfileError] = useState<string>('');
+  const [gmailInput, setGmailInput] = useState<string>(() => {
+    return gmailAccounts[currentUser.nama] || currentUser.gmail || '';
+  });
   const profileFileInputRef = useRef<HTMLInputElement>(null);
 
   // States for Logo Tab (Admin)
@@ -177,7 +184,10 @@ export function ProfileSettingsModal({
     } else {
       onUpdateProfilePic(currentUser.nama, '');
     }
-    triggerToast('Foto profil berhasil diperbarui!');
+    if (onUpdateGmail) {
+      onUpdateGmail(currentUser.nama, gmailInput);
+    }
+    triggerToast('Profil & Akun G-Mail berhasil diperbarui!');
   };
 
   const handleRemoveProfile = () => {
@@ -398,6 +408,24 @@ export function ProfileSettingsModal({
                     {currentUser.role === 'ustadz' ? 'Akses Guru Al-Qur\'an (Ustadz / Admin)' : 'Akses Siswa / Wali Murid'}
                   </p>
                 </div>
+              </div>
+
+              {/* G-Mail Account Field */}
+              <div className="space-y-2 bg-[#070D19]/50 p-4 rounded-2xl border border-slate-800/50">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Akun G-Mail
+                </label>
+                <input
+                  id="profile-gmail-input"
+                  type="email"
+                  placeholder="Masukkan akun G-Mail Anda (contoh: ustadz@gmail.com)"
+                  value={gmailInput}
+                  onChange={(e) => setGmailInput(e.target.value)}
+                  className="w-full px-4 py-2.5 text-xs border border-slate-800 bg-[#070D19] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-[10px] text-slate-500 font-semibold">
+                  Semua jenis akun diizinkan untuk mengedit atau mengisi kolom Akun G-Mail ini.
+                </p>
               </div>
 
               {/* Upload Drag & Drop Area */}

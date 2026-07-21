@@ -30,12 +30,14 @@ export interface UserAccount {
   id: string;
   nama: string;
   password?: string;
+  gmail?: string;
 }
 
 export interface UserSession {
   id: string;
   nama: string;
   role: 'admin' | 'ustadz' | 'siswa';
+  gmail?: string;
 }
 
 export interface TugasHarian {

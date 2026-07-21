@@ -274,11 +274,24 @@ export default function App() {
     const normalized = normalizeUserSession(session);
     setCurrentUser(normalized);
     localStorage.setItem('tahfizh_user_session', JSON.stringify(normalized));
+    if (normalized && normalized.gmail) {
+      setGmailAccounts(prev => {
+        const updated = { ...prev, [normalized.nama]: normalized.gmail || '' };
+        localStorage.setItem('tahfizh_gmail_accounts', JSON.stringify(updated));
+        return updated;
+      });
+    }
   };
 
   // Profile Picture States (Loaded from localStorage)
   const [profilePics, setProfilePics] = useState<Record<string, string>>(() => {
     const saved = localStorage.getItem('tahfizh_profile_pics');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // G-Mail Accounts State (Loaded from localStorage)
+  const [gmailAccounts, setGmailAccounts] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('tahfizh_gmail_accounts');
     return saved ? JSON.parse(saved) : {};
   });
 
@@ -298,6 +311,48 @@ export default function App() {
     }
     setProfilePics(updated);
     localStorage.setItem('tahfizh_profile_pics', JSON.stringify(updated));
+  };
+
+  const handleUpdateGmail = async (name: string, gmail: string) => {
+    const updated = { ...gmailAccounts };
+    if (gmail) {
+      updated[name] = gmail;
+    } else {
+      delete updated[name];
+    }
+    setGmailAccounts(updated);
+    localStorage.setItem('tahfizh_gmail_accounts', JSON.stringify(updated));
+
+    // Also update current user session if the logged-in user changed their own email
+    if (currentUser && currentUser.nama === name) {
+      const updatedSession = { ...currentUser, gmail };
+      setCurrentUser(updatedSession);
+      localStorage.setItem('tahfizh_user_session', JSON.stringify(updatedSession));
+    }
+
+    // Synchronize with Google Sheets
+    if (!usingDemoData && settings.appsScriptUrl) {
+      try {
+        const userId = currentUser?.id || name;
+        await fetch(settings.appsScriptUrl, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({
+            id: userId,
+            nama: name,
+            gmail: gmail,
+            targetTab: 'akun',
+            action: 'edit'
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to sync gmail to spreadsheet:', err);
+      }
+    }
   };
 
   const handleUpdateCustomLogo = (dataUrl: string) => {
@@ -657,6 +712,38 @@ export default function App() {
 
       const res = await response.json();
       if (res && res.status === 'success') {
+        // If there is Tugas Selanjutnya filled, also automatically post it to the Tugas Harian sheet
+        if (settings.appsScriptUrl && (recordWithId.tugasZiyadah || recordWithId.tugasMurojaah || recordWithId.tugasMateri)) {
+          const materiObj = {
+            ziyadah: recordWithId.tugasZiyadah || '',
+            murojaah: recordWithId.tugasMurojaah || '',
+            tugasMateri: recordWithId.tugasMateri || '',
+          };
+          try {
+            await fetch(settings.appsScriptUrl, {
+              method: 'POST',
+              mode: 'cors',
+              redirect: 'follow',
+              headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+              },
+              body: JSON.stringify({
+                id: `penilaian_tugas_${recordWithId.id}`,
+                tanggal: recordWithId.tanggalSetoran,
+                grade: recordWithId.grade,
+                materi: JSON.stringify(materiObj),
+                ustadz: currentUser?.nama || 'Ustadz',
+                keterangan: 'Tugas otomatis dari Penilaian',
+                siswa: recordWithId.nama,
+                targetTab: 'tugas',
+                action: 'create'
+              }),
+            });
+          } catch (tugasErr) {
+            console.error('Failed to sync automatic tugas harian:', tugasErr);
+          }
+        }
+
         // Refresh dashboard statistics from Google Sheets
         await fetchDataFromSheets(settings.appsScriptUrl);
         setIsSubmitting(false);
@@ -714,6 +801,60 @@ export default function App() {
 
       const res = await response.json();
       if (res && res.status === 'success') {
+        // Automatically sync or delete the associated Tugas Harian record
+        if (settings.appsScriptUrl) {
+          const hasTugas = !!(updatedRecord.tugasZiyadah || updatedRecord.tugasMurojaah || updatedRecord.tugasMateri);
+          const materiObj = {
+            ziyadah: updatedRecord.tugasZiyadah || '',
+            murojaah: updatedRecord.tugasMurojaah || '',
+            tugasMateri: updatedRecord.tugasMateri || '',
+          };
+          
+          try {
+            if (hasTugas) {
+              const hadTugas = !!(originalRecord?.tugasZiyadah || originalRecord?.tugasMurojaah || originalRecord?.tugasMateri);
+              await fetch(settings.appsScriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                redirect: 'follow',
+                headers: {
+                  'Content-Type': 'text/plain;charset=utf-8',
+                },
+                body: JSON.stringify({
+                  id: `penilaian_tugas_${updatedRecord.id}`,
+                  tanggal: updatedRecord.tanggalSetoran,
+                  grade: updatedRecord.grade,
+                  materi: JSON.stringify(materiObj),
+                  ustadz: currentUser?.nama || 'Ustadz',
+                  keterangan: 'Tugas otomatis dari Penilaian',
+                  siswa: updatedRecord.nama,
+                  targetTab: 'tugas',
+                  action: hadTugas ? 'edit' : 'create'
+                }),
+              });
+            } else {
+              const hadTugas = !!(originalRecord?.tugasZiyadah || originalRecord?.tugasMurojaah || originalRecord?.tugasMateri);
+              if (hadTugas) {
+                await fetch(settings.appsScriptUrl, {
+                  method: 'POST',
+                  mode: 'cors',
+                  redirect: 'follow',
+                  headers: {
+                    'Content-Type': 'text/plain;charset=utf-8',
+                  },
+                  body: JSON.stringify({
+                    id: `penilaian_tugas_${updatedRecord.id}`,
+                    targetTab: 'tugas',
+                    action: 'delete'
+                  }),
+                });
+              }
+            }
+          } catch (tugasErr) {
+            console.error('Failed to sync automatic tugas harian edit:', tugasErr);
+          }
+        }
+
         // Refresh dashboard statistics from Google Sheets
         await fetchDataFromSheets(settings.appsScriptUrl);
         setIsSubmitting(false);
@@ -775,6 +916,27 @@ export default function App() {
 
       const res = await response.json();
       if (res && res.status === 'success') {
+        // Also delete the associated Tugas Harian record if it existed
+        if (settings.appsScriptUrl && (recordToDelete.tugasZiyadah || recordToDelete.tugasMurojaah || recordToDelete.tugasMateri)) {
+          try {
+            await fetch(settings.appsScriptUrl, {
+              method: 'POST',
+              mode: 'cors',
+              redirect: 'follow',
+              headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+              },
+              body: JSON.stringify({
+                id: `penilaian_tugas_${recordToDelete.id}`,
+                targetTab: 'tugas',
+                action: 'delete'
+              }),
+            });
+          } catch (tugasErr) {
+            console.error('Failed to delete associated automatic tugas harian:', tugasErr);
+          }
+        }
+
         // Refresh dashboard statistics from Google Sheets
         await fetchDataFromSheets(settings.appsScriptUrl);
         if (editingSetoran?.id === recordToDelete.id) {
@@ -1840,12 +2002,8 @@ export default function App() {
               </div>
             )}
 
-            {/* Content Bento Grid: Form & Student Table with search/filters */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-           {/* Column 1: Input Assessment Form or Student Profile Progress Card */}
-          <div className="lg:col-span-1 space-y-6 order-2">
-            {currentUser.role === 'ustadz' || currentUser.role === 'admin' ? (
+            {/* Form Catat Penilaian Baru (Ustadz/Admin) - Top of Rekap Tab */}
+            {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
               <NewAssessmentForm
                 onAddSetoran={handleAddSetoran}
                 activeStudents={allowedStudentsForForm}
@@ -1854,56 +2012,63 @@ export default function App() {
                 onUpdateSetoran={handleUpdateSetoran}
                 onCancelEdit={() => setEditingSetoran(null)}
               />
-            ) : (
-              <div className="bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6">
-                <div className="border-b border-slate-100 pb-5 text-center flex flex-col items-center">
-                  <div className="inline-flex bg-blue-50 text-[#0000FE] p-4 rounded-full mb-3 border-4 border-blue-100">
-                    <UserCheck className="w-8 h-8 text-[#0000FE]" />
-                  </div>
-                  <h3 className="text-xl font-extrabold text-slate-900">{currentUser.nama}</h3>
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0000FE] border border-blue-100 mt-2 uppercase tracking-wider">
-                    <Sparkles className="w-3 h-3 text-[#0000FE]" /> Akun Siswa Aktif
-                  </span>
-                  {(() => {
-                    const ustadzName = getUstadzForStudent(currentUser.id, currentUser.nama);
-                    return ustadzName ? (
-                      <div className="mt-3 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl inline-flex items-center gap-1.5 text-xs font-extrabold text-blue-700">
-                        <Users className="w-3.5 h-3.5 text-blue-500" />
-                        Guru Al-Qur'an: Ustadz {ustadzName}
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
-                
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ringkasan Hafalan Anda</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
-                      <span className="block text-2xl font-black text-slate-900">{dashboardStats.totalSetoran}</span>
-                      <span className="text-[10px] text-slate-500 font-bold">Total Setoran</span>
-                    </div>
-                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
-                      <span className="block text-2xl font-black text-[#0000FE]">{dashboardStats.lancarRate}%</span>
-                      <span className="text-[10px] text-slate-500 font-bold font-sans">Kelancaran</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl space-y-2 text-xs text-[#0000FE]">
-                  <h5 className="font-bold text-[#0000FE]">Motivasi Hari Ini:</h5>
-                  <p className="italic leading-relaxed text-slate-700">
-                    "Sebaik-baik kalian adalah orang yang belajar Al-Qur'an dan mengajarkannya." (HR. Bukhari)
-                  </p>
-                  <p className="leading-relaxed pt-2 border-t border-blue-100 text-[11px] text-slate-500">
-                    Tetap istiqomah dalam memelihara hafalanmu. Pastikan setiap bimbingan ustadz dicatat & dipelajari kembali dengan baik.
-                  </p>
-                </div>
-              </div>
             )}
-          </div>
 
-          {/* Column 2 & 3: Table and Filters */}
-          <div className="lg:col-span-2 bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6 flex flex-col justify-between order-1">
+            {/* Content Bento Grid: Form & Student Table with search/filters */}
+            <div className={currentUser.role === 'ustadz' || currentUser.role === 'admin' ? "space-y-6" : "grid grid-cols-1 lg:grid-cols-3 gap-6"}>
+          
+              {/* Column 1: Student Profile Progress Card (Only for Student) */}
+              {currentUser.role !== 'ustadz' && currentUser.role !== 'admin' && (
+                <div className="lg:col-span-1 space-y-6 order-2">
+                  <div className="bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6">
+                    <div className="border-b border-slate-100 pb-5 text-center flex flex-col items-center">
+                      <div className="inline-flex bg-blue-50 text-[#0000FE] p-4 rounded-full mb-3 border-4 border-blue-100">
+                        <UserCheck className="w-8 h-8 text-[#0000FE]" />
+                      </div>
+                      <h3 className="text-xl font-extrabold text-slate-900">{currentUser.nama}</h3>
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-[#0000FE] border border-blue-100 mt-2 uppercase tracking-wider">
+                        <Sparkles className="w-3 h-3 text-[#0000FE]" /> Akun Siswa Aktif
+                      </span>
+                      {(() => {
+                        const ustadzName = getUstadzForStudent(currentUser.id, currentUser.nama);
+                        return ustadzName ? (
+                          <div className="mt-3 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl inline-flex items-center gap-1.5 text-xs font-extrabold text-blue-700">
+                            <Users className="w-3.5 h-3.5 text-blue-500" />
+                            Guru Al-Qur'an: Ustadz {ustadzName}
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ringkasan Hafalan Anda</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
+                          <span className="block text-2xl font-black text-slate-900">{dashboardStats.totalSetoran}</span>
+                          <span className="text-[10px] text-slate-500 font-bold">Total Setoran</span>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
+                          <span className="block text-2xl font-black text-[#0000FE]">{dashboardStats.lancarRate}%</span>
+                          <span className="text-[10px] text-slate-500 font-bold font-sans">Kelancaran</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl space-y-2 text-xs text-[#0000FE]">
+                      <h5 className="font-bold text-[#0000FE]">Motivasi Hari Ini:</h5>
+                      <p className="italic leading-relaxed text-slate-700">
+                        "Sebaik-baik kalian adalah orang yang belajar Al-Qur'an dan mengajarkannya." (HR. Bukhari)
+                      </p>
+                      <p className="leading-relaxed pt-2 border-t border-blue-100 text-[11px] text-slate-500">
+                        Tetap istiqomah dalam memelihara hafalanmu. Pastikan setiap bimbingan ustadz dicatat & dipelajari kembali dengan baik.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Column 2 & 3: Table and Filters */}
+              <div className={currentUser.role === 'ustadz' || currentUser.role === 'admin' ? "bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6 flex flex-col justify-between" : "lg:col-span-2 bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-200 p-6 space-y-6 flex flex-col justify-between order-1"}>
             
             {/* Table Control Header */}
             <div className="space-y-4">
@@ -2524,233 +2689,234 @@ export default function App() {
                   Buka Pop-up Informasi
                 </button>
               </div>
+            )}            {/* Form Tambah Tugas Baru (Ustadz/Admin) - Top of Tugas Tab */}
+            {(currentUser?.role === 'ustadz' || currentUser?.role === 'admin') && (
+              <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Plus className="w-4 h-4 text-[#0000FE]" />
+                    {editingTugas ? 'Edit Tugas Harian' : 'Tambah Tugas Baru'}
+                  </h3>
+                  {editingTugas && (
+                    <button
+                      onClick={() => {
+                        setEditingTugas(null);
+                        setTugasFormMateri('');
+                        setTugasFormZiyadah('');
+                        setTugasFormMurojaah('');
+                        setTugasFormTugasMateri('');
+                        setTugasFormUstadz('');
+                        setTugasFormKeterangan('');
+                        setTugasFormSiswa('All');
+                      }}
+                      className="text-xs font-bold text-rose-500 hover:underline"
+                    >
+                      Batal Edit
+                    </button>
+                  )}
+                </div>
+
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const isAnyMateriFilled = tugasFormZiyadah.trim() || tugasFormMurojaah.trim() || tugasFormTugasMateri.trim();
+                    if (!isAnyMateriFilled) {
+                      alert('Harap isi minimal salah satu tugas (Ziyadah, Murojaah, atau Materi)!');
+                      return;
+                    }
+                    
+                    const ustadzName = tugasFormUstadz.trim() || currentUser.nama;
+                    const combinedMateri = JSON.stringify({
+                      ziyadah: tugasFormZiyadah.trim(),
+                      murojaah: tugasFormMurojaah.trim(),
+                      tugasMateri: tugasFormTugasMateri.trim()
+                    });
+                    
+                    const payload = {
+                      tanggal: tugasFormTanggal,
+                      grade: tugasFormGrade,
+                      siswa: tugasFormSiswa,
+                      materi: combinedMateri,
+                      ustadz: ustadzName,
+                      keterangan: tugasFormKeterangan.trim(),
+                    };
+
+                    let success = false;
+                    if (editingTugas) {
+                      success = await handleUpdateTugas({
+                        ...editingTugas,
+                        ...payload,
+                      });
+                    } else {
+                      success = await handleAddTugas(payload);
+                    }
+
+                    if (success) {
+                      // Reset form
+                      setTugasFormMateri('');
+                      setTugasFormZiyadah('');
+                      setTugasFormMurojaah('');
+                      setTugasFormTugasMateri('');
+                      setTugasFormKeterangan('');
+                      setTugasFormSiswa('All');
+                    }
+                  }}
+                  className="space-y-4 text-xs font-sans"
+                >
+                  {/* Tanggal */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-500 font-bold">Tanggal Tugas</label>
+                    <input
+                      type="date"
+                      required
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
+                      value={tugasFormTanggal}
+                      onChange={(e) => setTugasFormTanggal(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Grade/Kelas */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-500 font-bold">Untuk Kelas / Grade</label>
+                    <select
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
+                      value={tugasFormGrade}
+                      onChange={(e) => setTugasFormGrade(e.target.value)}
+                    >
+                      <option value="All">Semua Kelas (All)</option>
+                      {uniqueGrades.filter(g => g !== 'All' && g !== 'halaqah_saya').map((g, idx) => (
+                        <option key={`tugas-form-grade-${g}-${idx}`} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Siswa Spesifik (Opsional) */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-500 font-bold flex items-center justify-between">
+                      <span>Untuk Siswa Spesifik (Opsional)</span>
+                      <span className="text-[10px] text-[#0000FE] font-black">Dari Spreadsheet</span>
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
+                      value={tugasFormSiswa}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTugasFormSiswa(val);
+                        if (val && val !== 'All') {
+                          const foundStudent = activeStudentsList.find(s => s.nama === val);
+                          if (foundStudent && foundStudent.grade) {
+                            setTugasFormGrade(foundStudent.grade);
+                          }
+                        }
+                      }}
+                    >
+                      <option value="All">Semua Siswa (All)</option>
+                      {(currentUser.role === 'admin' ? activeStudentsList : allowedStudentsForForm).map((st, idx) => (
+                        <option key={`student-opt-${st.nama}-${idx}`} value={st.nama}>
+                          {st.nama} {st.grade ? `(${st.grade})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Tugas Ziyadah */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-500 font-bold flex items-center justify-between">
+                      <span>Tugas Ziyadah</span>
+                      <span className="text-[10px] text-[#0000FE] font-black">Ziyadah</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Contoh: Juz 30 An-Naba' 1-15"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
+                      value={tugasFormZiyadah}
+                      onChange={(e) => setTugasFormZiyadah(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Tugas Murojaah */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-500 font-bold flex items-center justify-between">
+                      <span>Tugas Murojaah</span>
+                      <span className="text-[10px] text-blue-600 font-black">Murojaah</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Contoh: Al-Mulk s/d Al-Qolam"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
+                      value={tugasFormMurojaah}
+                      onChange={(e) => setTugasFormMurojaah(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Tugas Materi */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-500 font-bold flex items-center justify-between">
+                      <span>Tugas Materi</span>
+                      <span className="text-[10px] text-indigo-600 font-black font-semibold">Teori / Hafalan Baru</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Contoh: Pelajari hukum tajwid nun sukun & tanwin"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
+                      value={tugasFormTugasMateri}
+                      onChange={(e) => setTugasFormTugasMateri(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Ustadz */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-500 font-bold">Ustadz / Guru Pemberi</label>
+                    <input
+                      type="text"
+                      placeholder={currentUser.nama}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
+                      value={tugasFormUstadz}
+                      onChange={(e) => setTugasFormUstadz(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Keterangan */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-500 font-bold">Keterangan / Catatan Tambahan</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Catatan tambahan bagi siswa..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700"
+                      value={tugasFormKeterangan}
+                      onChange={(e) => setTugasFormKeterangan(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Submit button */}
+                  <button
+                    type="submit"
+                    disabled={isSubmittingTugas}
+                    className="w-full py-3 bg-[#0000FE] hover:bg-[#0000D0] text-white font-extrabold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 text-xs cursor-pointer"
+                  >
+                    {isSubmittingTugas ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        {editingTugas ? 'Simpan Perubahan' : 'Publish Tugas'}
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
             )}
 
             {/* Sub content grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className={currentUser?.role === 'ustadz' || currentUser?.role === 'admin' ? "space-y-6" : "grid grid-cols-1 lg:grid-cols-3 gap-6"}>
               
-              {/* Form Column - Only for Ustadz/Admin, else Motivation card */}
-              <div className="lg:col-span-1 space-y-6 order-2">
-                {currentUser?.role === 'ustadz' || currentUser?.role === 'admin' ? (
-                  <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                        <Plus className="w-4 h-4 text-[#0000FE]" />
-                        {editingTugas ? 'Edit Tugas Harian' : 'Tambah Tugas Baru'}
-                      </h3>
-                      {editingTugas && (
-                        <button
-                          onClick={() => {
-                            setEditingTugas(null);
-                            setTugasFormMateri('');
-                            setTugasFormZiyadah('');
-                            setTugasFormMurojaah('');
-                            setTugasFormTugasMateri('');
-                            setTugasFormUstadz('');
-                            setTugasFormKeterangan('');
-                            setTugasFormSiswa('All');
-                          }}
-                          className="text-xs font-bold text-rose-500 hover:underline"
-                        >
-                          Batal Edit
-                        </button>
-                      )}
-                    </div>
-
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        const isAnyMateriFilled = tugasFormZiyadah.trim() || tugasFormMurojaah.trim() || tugasFormTugasMateri.trim();
-                        if (!isAnyMateriFilled) {
-                          alert('Harap isi minimal salah satu tugas (Ziyadah, Murojaah, atau Materi)!');
-                          return;
-                        }
-                        
-                        const ustadzName = tugasFormUstadz.trim() || currentUser.nama;
-                        const combinedMateri = JSON.stringify({
-                          ziyadah: tugasFormZiyadah.trim(),
-                          murojaah: tugasFormMurojaah.trim(),
-                          tugasMateri: tugasFormTugasMateri.trim()
-                        });
-                        
-                        const payload = {
-                          tanggal: tugasFormTanggal,
-                          grade: tugasFormGrade,
-                          siswa: tugasFormSiswa,
-                          materi: combinedMateri,
-                          ustadz: ustadzName,
-                          keterangan: tugasFormKeterangan.trim(),
-                        };
-
-                        let success = false;
-                        if (editingTugas) {
-                          success = await handleUpdateTugas({
-                            ...editingTugas,
-                            ...payload,
-                          });
-                        } else {
-                          success = await handleAddTugas(payload);
-                        }
-
-                        if (success) {
-                          // Reset form
-                          setTugasFormMateri('');
-                          setTugasFormZiyadah('');
-                          setTugasFormMurojaah('');
-                          setTugasFormTugasMateri('');
-                          setTugasFormKeterangan('');
-                          setTugasFormSiswa('All');
-                        }
-                      }}
-                      className="space-y-4 text-xs font-sans"
-                    >
-                      {/* Tanggal */}
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold">Tanggal Tugas</label>
-                        <input
-                          type="date"
-                          required
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
-                          value={tugasFormTanggal}
-                          onChange={(e) => setTugasFormTanggal(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Grade/Kelas */}
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold">Untuk Kelas / Grade</label>
-                        <select
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
-                          value={tugasFormGrade}
-                          onChange={(e) => setTugasFormGrade(e.target.value)}
-                        >
-                          <option value="All">Semua Kelas (All)</option>
-                          {uniqueGrades.filter(g => g !== 'All' && g !== 'halaqah_saya').map((g, idx) => (
-                            <option key={`tugas-form-grade-${g}-${idx}`} value={g}>{g}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Siswa Spesifik (Opsional) */}
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold flex items-center justify-between">
-                          <span>Untuk Siswa Spesifik (Opsional)</span>
-                          <span className="text-[10px] text-[#0000FE] font-black">Dari Spreadsheet</span>
-                        </label>
-                        <select
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
-                          value={tugasFormSiswa}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setTugasFormSiswa(val);
-                            if (val && val !== 'All') {
-                              const foundStudent = activeStudentsList.find(s => s.nama === val);
-                              if (foundStudent && foundStudent.grade) {
-                                setTugasFormGrade(foundStudent.grade);
-                              }
-                            }
-                          }}
-                        >
-                          <option value="All">Semua Siswa (All)</option>
-                          {(currentUser.role === 'admin' ? activeStudentsList : allowedStudentsForForm).map((st, idx) => (
-                            <option key={`student-opt-${st.nama}-${idx}`} value={st.nama}>
-                              {st.nama} {st.grade ? `(${st.grade})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Tugas Ziyadah */}
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold flex items-center justify-between">
-                          <span>Tugas Ziyadah</span>
-                          <span className="text-[10px] text-[#0000FE] font-black">Ziyadah</span>
-                        </label>
-                        <textarea
-                          rows={2}
-                          placeholder="Contoh: Juz 30 An-Naba' 1-15"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
-                          value={tugasFormZiyadah}
-                          onChange={(e) => setTugasFormZiyadah(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Tugas Murojaah */}
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold flex items-center justify-between">
-                          <span>Tugas Murojaah</span>
-                          <span className="text-[10px] text-blue-600 font-black">Murojaah</span>
-                        </label>
-                        <textarea
-                          rows={2}
-                          placeholder="Contoh: Al-Mulk s/d Al-Qolam"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
-                          value={tugasFormMurojaah}
-                          onChange={(e) => setTugasFormMurojaah(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Tugas Materi */}
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold flex items-center justify-between">
-                          <span>Tugas Materi</span>
-                          <span className="text-[10px] text-indigo-600 font-black font-semibold">Teori / Hafalan Baru</span>
-                        </label>
-                        <textarea
-                          rows={2}
-                          placeholder="Contoh: Pelajari hukum tajwid nun sukun & tanwin"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
-                          value={tugasFormTugasMateri}
-                          onChange={(e) => setTugasFormTugasMateri(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Ustadz */}
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold">Ustadz / Guru Pemberi</label>
-                        <input
-                          type="text"
-                          placeholder={currentUser.nama}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
-                          value={tugasFormUstadz}
-                          onChange={(e) => setTugasFormUstadz(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Keterangan */}
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 font-bold">Keterangan / Catatan Tambahan</label>
-                        <textarea
-                          rows={3}
-                          placeholder="Catatan tambahan bagi siswa..."
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700"
-                          value={tugasFormKeterangan}
-                          onChange={(e) => setTugasFormKeterangan(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Submit button */}
-                      <button
-                        type="submit"
-                        disabled={isSubmittingTugas}
-                        className="w-full py-3 bg-[#0000FE] hover:bg-[#0000D0] text-white font-extrabold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 text-xs cursor-pointer"
-                      >
-                        {isSubmittingTugas ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Menyimpan...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-4 h-4" />
-                            {editingTugas ? 'Simpan Perubahan' : 'Publish Tugas'}
-                          </>
-                        )}
-                      </button>
-                    </form>
-                  </div>
-                ) : (
-                  // Student View Motivation & Instructions
+              {/* Form Column - Only for Student motivation card */}
+              {currentUser?.role !== 'ustadz' && currentUser?.role !== 'admin' && (
+                <div className="lg:col-span-1 space-y-6 order-2">
+                  {/* Student View Motivation & Instructions */}
                   <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-6">
                     <div className="border-b border-slate-100 pb-4 text-center">
                       <div className="inline-flex bg-blue-50 text-blue-800 p-4 rounded-full mb-2 border-4 border-blue-100">
@@ -2774,11 +2940,11 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Tasks List Column */}
-              <div className="lg:col-span-2 space-y-4 order-1">
+              <div className={currentUser?.role === 'ustadz' || currentUser?.role === 'admin' ? "space-y-4" : "lg:col-span-2 space-y-4 order-1"}>
                 {/* Search & Filters for Tasks */}
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="relative w-full sm:max-w-xs">
@@ -3616,9 +3782,11 @@ export default function App() {
         <ProfileSettingsModal
           currentUser={currentUser}
           profilePics={profilePics}
+          gmailAccounts={gmailAccounts}
           customLogo={customLogo}
           onUpdateProfilePic={handleUpdateProfilePic}
           onUpdateCustomLogo={handleUpdateCustomLogo}
+          onUpdateGmail={handleUpdateGmail}
           onClose={() => setShowProfileModal(false)}
           setoran={setoran}
           activeStudents={activeStudentsList}

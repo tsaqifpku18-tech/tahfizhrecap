@@ -110,6 +110,7 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
           id: account.id,
           nama: account.nama, // "namaa" column
           role: finalRole,
+          gmail: account.gmail,
         };
 
         setIsLoading(false);
