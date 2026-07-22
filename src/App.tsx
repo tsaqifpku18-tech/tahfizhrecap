@@ -343,7 +343,35 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Gmail synchronization failed:", err);
-      alert(`Gagal sinkronisasi Gmail: ${err?.message || err}`);
+      
+      const errCode = String(err?.code || '');
+      const errMsg = String(err?.message || err || '');
+      const isUnauthorizedDomain = 
+        errCode.includes('unauthorized-domain') || 
+        errCode.includes('unauthorized-client-domain') ||
+        errMsg.toLowerCase().includes('unauthorized-domain') ||
+        errMsg.toLowerCase().includes('unauthorized domain') ||
+        errMsg.toLowerCase().includes('authorized-domain') ||
+        errMsg.toLowerCase().includes('authorized domain');
+
+      if (isUnauthorizedDomain) {
+        const currentDomain = window.location.hostname;
+        const pId = firebaseConfig.projectId || 'red-ripple-k6ppv';
+        alert(
+          `⚠️ SINKRONISASI DIBLOKIR OLEH FIREBASE (UNAUTHORIZED DOMAIN) ⚠️\n\n` +
+          `Sistem mendeteksi bahwa domain URL yang dipublish belum didaftarkan sebagai domain tepercaya di Firebase Console Anda.\n\n` +
+          `Silakan ikuti langkah-langkah mudah berikut untuk mengizinkannya:\n` +
+          `1. Buka halaman pengaturan Firebase Auth Anda melalui link berikut:\n` +
+          `   https://console.firebase.google.com/project/${pId}/authentication/settings\n\n` +
+          `2. Cari bagian "Authorized Domains" (Domain resmi).\n\n` +
+          `3. Klik tombol "Add Domain" (Tambah Domain) lalu masukkan domain berikut:\n` +
+          `   ${currentDomain}\n\n` +
+          `4. Klik "Add" (Simpan).\n\n` +
+          `Setelah ditambahkan, tunggu sekitar 1 menit dan coba klik tombol sinkronisasi kembali. Insya Allah sinkronisasi akan berhasil!`
+        );
+      } else {
+        alert(`Gagal sinkronisasi Gmail: ${err?.message || err}`);
+      }
     } finally {
       setIsGmailSyncing(false);
     }
@@ -574,7 +602,7 @@ export default function App() {
   };
 
   // Default Google Apps Script URL set by the developer
-  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyymGXp0mQ0vfcA2SU60oOBlyNSJ1PCGhoD5o8vV97kzooE-h-Pbrq_-LtfHU2fNavX/exec';
+  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcP6YvgV66Z4x_i7mw8UDNYermPPhd3W1INWCUISoK9z3FR9lJb8Ixu4lnWezMHz7B/exec';
 
   // Settings state (Loaded from localStorage with fallback to default Apps Script URL)
   const [settings, setSettings] = useState<Settings>(() => {
@@ -1257,7 +1285,7 @@ export default function App() {
 
   // Delete assessment
   const handleDeleteSetoran = async (recordToDelete: Setoran): Promise<boolean> => {
-    if (!currentUser || currentUser.role !== 'ustadz') {
+    if (!currentUser || (currentUser.role !== 'ustadz' && currentUser.role !== 'admin')) {
       console.error('Unauthorized deletion attempt.');
       return false;
     }
@@ -1541,7 +1569,7 @@ export default function App() {
 
   // Delete Tugas Harian
   const handleDeleteTugas = async (tugasToDelete: TugasHarian): Promise<boolean> => {
-    if (!currentUser || currentUser.role !== 'ustadz') {
+    if (!currentUser || (currentUser.role !== 'ustadz' && currentUser.role !== 'admin')) {
       console.error('Unauthorized deletion attempt.');
       return false;
     }
@@ -1741,9 +1769,12 @@ export default function App() {
       // But we also let them filter. Let's see what grade is associated with this student in setoran
       let studentGrade = '';
       if (isStudent) {
-        const matchingRecord = setoran.find((s) => isStudentNameMatched(s.nama, currentUser.nama));
-        if (matchingRecord) {
-          studentGrade = matchingRecord.grade;
+        studentGrade = currentUser.grade || '';
+        if (!studentGrade) {
+          const matchingRecord = setoran.find((s) => isStudentNameMatched(s.nama, currentUser.nama));
+          if (matchingRecord) {
+            studentGrade = matchingRecord.grade;
+          }
         }
       }
 
@@ -1752,9 +1783,11 @@ export default function App() {
                             (t.keterangan || '').toLowerCase().includes((tugasSearchQuery || '').toLowerCase()) ||
                             (t.siswa || '').toLowerCase().includes((tugasSearchQuery || '').toLowerCase());
                              
+      const isSpecificSiswa = t.siswa && t.siswa.toLowerCase() !== 'all' && t.siswa.toLowerCase() !== 'semua' && t.siswa.toLowerCase() !== 'semua siswa';
+
       let matchesGrade = true;
       if (gradeFilter === 'halaqah_saya') {
-        if (t.siswa && t.siswa !== 'All') {
+        if (isSpecificSiswa) {
           const tSiswaLower = (t.siswa || '').toLowerCase();
           const studentObj = activeStudentsList.find((st) => isStudentNameMatched(st.nama, t.siswa || ''));
           matchesGrade = (studentObj && halaqahStudentIds.includes(studentObj.id)) || halaqahStudentNames.includes(tSiswaLower);
@@ -1774,7 +1807,7 @@ export default function App() {
       }
 
       // If the task is specific to a single student
-      if (t.siswa && t.siswa !== 'All') {
+      if (isSpecificSiswa) {
         if (isStudent) {
           return matchesSearch && isStudentNameMatched(t.siswa, currentUser.nama);
         } else {
@@ -1818,10 +1851,12 @@ export default function App() {
       }
       
       // If it is a generic/class task, resolve student's current active grade
-      let studentGrade = '';
-      const matchingRecord = setoran.find((s) => isStudentNameMatched(s.nama, currentUser.nama));
-      if (matchingRecord) {
-        studentGrade = matchingRecord.grade;
+      let studentGrade = currentUser.grade || '';
+      if (!studentGrade) {
+        const matchingRecord = setoran.find((s) => isStudentNameMatched(s.nama, currentUser.nama));
+        if (matchingRecord) {
+          studentGrade = matchingRecord.grade;
+        }
       }
       
       const matchesGrade = t.grade === 'All' || (studentGrade && t.grade === studentGrade);
@@ -3629,7 +3664,7 @@ export default function App() {
                               <span className="bg-blue-50 text-[#0000FE] border border-blue-100 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
                                 {t.grade === 'All' ? 'Semua Kelas' : `Kelas: ${t.grade}`}
                               </span>
-                              {t.siswa && t.siswa !== 'All' && (
+                              {t.siswa && t.siswa.toLowerCase() !== 'all' && t.siswa.toLowerCase() !== 'semua' && t.siswa.toLowerCase() !== 'semua siswa' && (
                                 <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
                                   Khusus Siswa: {t.siswa}
                                 </span>
@@ -3682,7 +3717,7 @@ export default function App() {
                           {/* Ustadz/Admin Controls */}
                           {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
                             <div className="flex items-center gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
-                              {currentUser && (currentUser.role === 'admin' || t.siswa === 'All' || canCurrentUserEditStudent(undefined, t.siswa)) ? (
+                              {currentUser && (currentUser.role === 'admin' || !t.siswa || t.siswa.toLowerCase() === 'all' || t.siswa.toLowerCase() === 'semua' || t.siswa.toLowerCase() === 'semua siswa' || canCurrentUserEditStudent(undefined, t.siswa)) ? (
                                 <>
                                   <button
                                     onClick={() => {

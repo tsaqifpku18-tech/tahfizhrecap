@@ -421,7 +421,18 @@ function doGet(e) {
       }
     }
     
-    return createJsonResponse({ status: "success", data: tasks });
+    // Filter out duplicates by ID before returning to prevent rendering duplicate cards
+    var uniqueTasks = [];
+    var seenTaskIds = {};
+    for (var j = 0; j < tasks.length; j++) {
+      var tId = tasks[j].id;
+      if (!seenTaskIds[tId]) {
+        seenTaskIds[tId] = true;
+        uniqueTasks.push(tasks[j]);
+      }
+    }
+    
+    return createJsonResponse({ status: "success", data: uniqueTasks });
   }
 
   // JIKA PERMINTAAN DATA CAPAIAN TARGET ZIYADAH
@@ -944,6 +955,8 @@ function doPost(e) {
         return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil ditambahkan." });
       } else if (action === "edit") {
         var idToFind = String(postData.id || "").trim();
+        var updatedInPenilaian = false;
+        
         if (idToFind.indexOf("penilaian_tugas_") === 0) {
           var realId = idToFind.substring("penilaian_tugas_".length);
           var sheetPenilaian = ss.getSheetByName("Penilaian") || ss.getSheetByName("penilaian") || ss.getSheets()[0];
@@ -985,10 +998,9 @@ function doPost(e) {
               if (pTugasMurojaahIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasMurojaahIdx + 1).setValue(mVal);
               if (pTugasMateriIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasMateriIdx + 1).setValue(tmVal);
               
-              return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil diperbarui." });
+              updatedInPenilaian = true;
             }
           }
-          return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
         }
 
         var foundRow = findRowById(sheet, idToFind);
@@ -1085,6 +1097,53 @@ function doPost(e) {
           
           sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
           return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil diperbarui." });
+        } else if (updatedInPenilaian) {
+          // If updated in Penilaian but not found in Tugas Harian sheet (maybe it didn't sync before),
+          // append it to Tugas Harian sheet to keep them in sync
+          var zVal = "";
+          var mVal = "";
+          var tmVal = "";
+          if (postData.materi) {
+            try {
+              var parsed = JSON.parse(postData.materi);
+              if (parsed && typeof parsed === 'object') {
+                zVal = String(parsed.ziyadah || "").trim();
+                mVal = String(parsed.murojaah || "").trim();
+                tmVal = String(parsed.tugasMateri || parsed.materi || "").trim();
+              } else {
+                tmVal = String(postData.materi).trim();
+              }
+            } catch(e) {
+              tmVal = String(postData.materi).trim();
+            }
+          }
+          if (postData.ziyadah) zVal = String(postData.ziyadah).trim();
+          if (postData.murojaah) mVal = String(postData.murojaah).trim();
+          if (postData.tugasMateri) tmVal = String(postData.tugasMateri).trim();
+          
+          var standardTugasHeaders = ["ID", "Tanggal", "Grade", "Tugas Ziyadah", "Tugas Murojaah", "Tugas Materi", "Ustadz", "Keterangan", "Siswa"];
+          var headers = sheet.getLastColumn() > 0 ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] : [];
+          for (var h = 0; h < standardTugasHeaders.length; h++) {
+            if (h >= headers.length) {
+              headers.push(standardTugasHeaders[h]);
+              sheet.getRange(1, h + 1).setValue(standardTugasHeaders[h]);
+            }
+          }
+          
+          var idIdx = 0, tanggalIdx = 1, gradeIdx = 2, tugasZiyadahIdx = 3, tugasMurojaahIdx = 4, tugasMateriIdx = 5, ustadzIdx = 6, ketIdx = 7, siswaIdx = 8;
+          var rowData = new Array(9).fill("");
+          rowData[idIdx] = idToFind;
+          rowData[tanggalIdx] = String(postData.tanggal || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"));
+          rowData[gradeIdx] = String(postData.grade || "All");
+          rowData[tugasZiyadahIdx] = zVal;
+          rowData[tugasMurojaahIdx] = mVal;
+          rowData[tugasMateriIdx] = tmVal;
+          rowData[ustadzIdx] = String(postData.ustadz || "Ustadz");
+          rowData[ketIdx] = String(postData.keterangan || "Tugas otomatis dari Penilaian");
+          rowData[siswaIdx] = String(postData.siswa || "All");
+          
+          sheet.appendRow(rowData);
+          return createJsonResponse({ status: "success", message: "Alhamdulillah, tugas harian berhasil diperbarui dan disinkronkan." });
         } else {
           return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
         }
