@@ -37,12 +37,14 @@ import {
   Smile,
   Frown,
   Mail,
-  ExternalLink
+  ExternalLink,
+  ShieldCheck,
+  Info
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
-import { Setoran, Settings, UserSession, TugasHarian, CapaianTargetZiyadah } from './types';
+import { Setoran, Settings, UserSession, TugasHarian, CapaianTargetZiyadah, UserAccount } from './types';
 
 // Inisialisasi Firebase Auth untuk integrasi Gmail Ustadz
 const firebaseApp = initializeApp(firebaseConfig);
@@ -51,7 +53,7 @@ const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.addScope('https://www.googleapis.com/auth/gmail.send');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
-import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH } from './data';
+import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH, DEMO_AKUN } from './data';
 import { StatsCard } from './components/StatsCard';
 import { NewAssessmentForm } from './components/NewAssessmentForm';
 import { StudentDetailModal } from './components/StudentDetailModal';
@@ -458,12 +460,18 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('tahfizh_user_session');
+    localStorage.removeItem('tahfizh_admin_original_session');
+    setOriginalAdminSession(null);
   };
 
   const handleLoginSuccess = (session: UserSession) => {
     const normalized = normalizeUserSession(session);
     setCurrentUser(normalized);
     localStorage.setItem('tahfizh_user_session', JSON.stringify(normalized));
+    if (normalized && normalized.role === 'admin') {
+      localStorage.setItem('tahfizh_admin_original_session', JSON.stringify(normalized));
+      setOriginalAdminSession(normalized);
+    }
     if (normalized && normalized.gmail) {
       setGmailAccounts(prev => {
         const updated = { ...prev, [normalized.nama]: normalized.gmail || '' };
@@ -569,12 +577,75 @@ export default function App() {
 
   // UI / Navigation / Tab State
   const [showConfig, setShowConfig] = useState<boolean>(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false); // Changed to false by default for all accounts on initial load
   const [showLatestInfoPopup, setShowLatestInfoPopup] = useState<boolean>(true);
+
+  // Administrative simulation and list of accounts
+  const [allAccounts, setAllAccounts] = useState<UserAccount[]>(() => {
+    const saved = localStorage.getItem('tahfizh_all_accounts');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse all accounts from localStorage', e);
+      }
+    }
+    return DEMO_AKUN;
+  });
+
+  const [originalAdminSession, setOriginalAdminSession] = useState<UserSession | null>(() => {
+    const saved = localStorage.getItem('tahfizh_admin_original_session');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse original admin session', e);
+      }
+    }
+    return null;
+  });
+
+  const handleSimulateUser = (userId: string) => {
+    const targetAccount = allAccounts.find(a => a.id === userId);
+    if (targetAccount) {
+      const simulatedSession: UserSession = {
+        id: targetAccount.id,
+        nama: targetAccount.nama,
+        role: targetAccount.role,
+        gmail: targetAccount.gmail || '',
+        grade: targetAccount.grade || ''
+      };
+      setCurrentUser(simulatedSession);
+      localStorage.setItem('tahfizh_user_session', JSON.stringify(simulatedSession));
+    }
+  };
+
+  const handleReturnToAdmin = () => {
+    if (originalAdminSession) {
+      setCurrentUser(originalAdminSession);
+      localStorage.setItem('tahfizh_user_session', JSON.stringify(originalAdminSession));
+    }
+  };
 
   // 2. Filter States
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [adminAccountSearchQuery, setAdminAccountSearchQuery] = useState<string>('');
   const [tugasSearchQuery, setTugasSearchQuery] = useState<string>('');
+
+  // Filtered accounts for administrative simulation dropdown
+  const filteredSimulationAccounts = useMemo(() => {
+    if (!adminAccountSearchQuery.trim()) return allAccounts;
+    const query = adminAccountSearchQuery.toLowerCase().trim();
+    return allAccounts.filter((acc) => {
+      const isUstadzByName = acc.nama.toLowerCase().includes('ustadz');
+      const roleLabel = acc.role === 'admin' ? 'admin' : (acc.role === 'ustadz' || isUstadzByName) ? 'ustadz' : 'siswa';
+      return (
+        acc.nama.toLowerCase().includes(query) ||
+        roleLabel.includes(query) ||
+        acc.id.toLowerCase().includes(query)
+      );
+    });
+  }, [allAccounts, adminAccountSearchQuery]);
   const [gradeFilter, setGradeFilter] = useState<string>('All');
   const [kegiatanFilter, setKegiatanFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -763,6 +834,30 @@ export default function App() {
     }
   };
 
+  // Fetch Accounts list from Google Sheets database
+  const fetchAccounts = async (url: string): Promise<void> => {
+    if (!url) return;
+    try {
+      const separator = url.includes('?') ? '&' : '?';
+      const response = await fetch(`${url}${separator}tab=akun`, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      if (response.ok) {
+        const res = await response.json();
+        if (res && res.status === 'success' && Array.isArray(res.data) && res.data.length > 0) {
+          setAllAccounts(res.data);
+          localStorage.setItem('tahfizh_all_accounts', JSON.stringify(res.data));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch accounts from sheet database:', err);
+    }
+  };
+
   // Fetch data from Google Apps Script Web App
   const fetchDataFromSheets = async (url: string): Promise<boolean> => {
     if (!url) {
@@ -796,6 +891,7 @@ export default function App() {
         setSetoran(sortedData);
         await fetchTugasHarian(url);
         await fetchCapaianZiyadah(url);
+        await fetchAccounts(url);
         setConnectionStatus('connected');
         setUsingDemoData(false);
         return true;
@@ -834,6 +930,7 @@ export default function App() {
       setSetoran(DEMO_SETORAN);
       setTugasHarian(DEMO_TUGAS_HARIAN);
       setCapaianZiyadah(DEMO_CAPAIAN_TARGET_ZIYADAH);
+      setAllAccounts(DEMO_AKUN);
       setUsingDemoData(true);
       setConnectionStatus('disconnected');
     }
@@ -849,6 +946,7 @@ export default function App() {
       setSetoran((prev) => [...prev]);
       setTugasHarian((prev) => [...prev]);
       setCapaianZiyadah((prev) => [...prev]);
+      setAllAccounts(DEMO_AKUN);
     } else {
       await fetchDataFromSheets(settings.appsScriptUrl);
     }
@@ -860,6 +958,7 @@ export default function App() {
     setSetoran(DEMO_SETORAN);
     setTugasHarian(DEMO_TUGAS_HARIAN);
     setCapaianZiyadah(DEMO_CAPAIAN_TARGET_ZIYADAH);
+    setAllAccounts(DEMO_AKUN);
     setUsingDemoData(true);
     setConnectionStatus('disconnected');
     setErrorMessage('');
@@ -1637,13 +1736,24 @@ export default function App() {
     })[0];
   }, [setoran, currentUser]);
 
-  // Latest tugas harian for the student
+  // Latest tugas harian for the student (strictly personal or matching class, avoiding other students' records)
   const latestTugasForStudent = useMemo(() => {
     if (!currentUser || currentUser.role !== 'siswa') return null;
     const studentTasks = tugasHarian.filter(t => {
-      const matchesGrade = t.grade === 'All' || (currentUser.grade && t.grade === currentUser.grade);
-      const matchesSiswa = t.siswa === 'All' || isStudentNameMatched(t.siswa, currentUser.nama);
-      return matchesGrade || matchesSiswa;
+      // If the task specifies a student, it must match this student's name
+      if (t.siswa && t.siswa.toLowerCase() !== 'all' && t.siswa.toLowerCase() !== 'semua' && t.siswa.toLowerCase() !== 'semua siswa') {
+        return isStudentNameMatched(t.siswa, currentUser.nama);
+      }
+      
+      // If it is a generic/class task, resolve student's current active grade
+      let studentGrade = '';
+      const matchingRecord = setoran.find((s) => isStudentNameMatched(s.nama, currentUser.nama));
+      if (matchingRecord) {
+        studentGrade = matchingRecord.grade;
+      }
+      
+      const matchesGrade = t.grade === 'All' || (studentGrade && t.grade === studentGrade);
+      return matchesGrade;
     });
     if (studentTasks.length === 0) return null;
     return [...studentTasks].sort((a, b) => {
@@ -1652,7 +1762,7 @@ export default function App() {
       if (dateB !== dateA) return dateB - dateA;
       return tugasHarian.indexOf(b) - tugasHarian.indexOf(a);
     })[0];
-  }, [tugasHarian, currentUser]);
+  }, [tugasHarian, currentUser, setoran]);
 
   // Stats Calculations for Dashboard overview widgets
   const dashboardStats = useMemo(() => {
@@ -1867,6 +1977,48 @@ export default function App() {
             </span>
           </div>
 
+          {/* Administrative Simulation Control Panel */}
+          {originalAdminSession && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5 shadow-2xs">
+              <ShieldCheck className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
+              <span className="hidden lg:inline text-[10px] font-extrabold text-amber-700 uppercase tracking-wider">Simulasi Sesi:</span>
+              <input
+                type="text"
+                id="admin-account-search-input"
+                placeholder="Search Akun..."
+                value={adminAccountSearchQuery}
+                onChange={(e) => setAdminAccountSearchQuery(e.target.value)}
+                className="bg-white border border-amber-200 text-amber-950 px-2 py-1 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-1 focus:ring-amber-400 w-28 md:w-36 transition-all"
+              />
+              <select
+                id="admin-sim-select"
+                value={currentUser?.id || ''}
+                onChange={(e) => handleSimulateUser(e.target.value)}
+                className="bg-transparent border-none text-amber-950 font-black focus:outline-hidden cursor-pointer text-xs pr-1"
+              >
+                {filteredSimulationAccounts.map((acc) => {
+                  const isUstadzByName = acc.nama.toLowerCase().includes('ustadz');
+                  const roleLabel = acc.role === 'admin' ? 'Admin' : (acc.role === 'ustadz' || isUstadzByName) ? 'Ustadz' : 'Siswa';
+                  return (
+                    <option key={acc.id} value={acc.id} className="text-slate-800 bg-white font-semibold">
+                      {acc.nama} ({roleLabel})
+                    </option>
+                  );
+                })}
+              </select>
+              {currentUser?.id !== originalAdminSession.id && (
+                <button
+                  id="btn-restore-admin"
+                  onClick={handleReturnToAdmin}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-black px-2 py-1 rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer shadow-3xs scale-95"
+                  title="Kembali ke Akun Administrator Utama"
+                >
+                  Selesai
+                </button>
+              )}
+            </div>
+          )}
+
           {/* MASUK GOOGLE / SHEET URL (Config Trigger) */}
           <button
             id="btn-toggle-config-guide"
@@ -1888,200 +2040,220 @@ export default function App() {
         
         {/* Sidebar Navigation */}
         <aside className={`transition-all duration-300 ease-in-out ${
-          isSidebarOpen ? 'w-72 p-4 opacity-100 border-r border-slate-200' : 'w-0 p-0 opacity-0 overflow-hidden border-r-0'
-        } bg-white text-slate-800 flex flex-col justify-between shrink-0 shadow-xs z-10 select-none overflow-y-auto`}>
-          <div className="flex flex-col gap-5">
-            {/* Top toggle (Role display) */}
-            <div className="bg-slate-100 p-1 rounded-xl flex items-center w-full gap-1 border border-slate-200 shrink-0">
-              <div 
-                className={`w-1/3 text-center text-[10px] font-bold py-2 rounded-lg transition-all ${
-                  currentUser.role === 'siswa'
-                    ? 'text-white bg-[#0000FE] shadow-xs font-black'
-                    : 'text-slate-400'
-                }`}
-              >
-                Siswa
+          isSidebarOpen ? 'w-[76px] p-3 opacity-100 border-r border-slate-200' : 'w-0 p-0 opacity-0 overflow-hidden border-r-0'
+        } bg-white text-slate-800 flex flex-col justify-between shrink-0 shadow-xs z-20 select-none overflow-y-auto`}>
+          <div className="flex flex-col gap-5 items-center">
+            {/* Active Role Indicator */}
+            <div className="relative group/role flex justify-center mt-1">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-3xs ${
+                currentUser.role === 'admin'
+                  ? 'bg-amber-50 border-amber-200 text-amber-600'
+                  : currentUser.role === 'ustadz'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+                  : 'bg-blue-50 border-blue-200 text-[#0000FE]'
+              }`}>
+                {currentUser.role === 'admin' ? (
+                  <ShieldCheck className="w-5 h-5" />
+                ) : currentUser.role === 'ustadz' ? (
+                  <GraduationCap className="w-5 h-5" />
+                ) : (
+                  <UserCheck className="w-5 h-5" />
+                )}
               </div>
-              <div 
-                className={`w-1/3 text-center text-[10px] font-bold py-2 rounded-lg transition-all ${
-                  currentUser.role === 'ustadz'
-                    ? 'text-white bg-[#0000FE] shadow-xs font-black'
-                    : 'text-slate-400'
-                }`}
-              >
-                Ustadz
-              </div>
-              <div 
-                className={`w-1/3 text-center text-[10px] font-bold py-2 rounded-lg transition-all ${
-                  currentUser.role === 'admin'
-                    ? 'text-white bg-amber-500 shadow-xs font-black'
-                    : 'text-slate-400'
-                }`}
-              >
-                Admin
+              {/* Tooltip */}
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/role:opacity-100 group-hover/role:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                Hak Akses: {currentUser.role === 'admin' ? 'Administrator' : currentUser.role === 'ustadz' ? "Guru (Ustadz)" : 'Siswa'}
               </div>
             </div>
 
             {/* Profile Widget */}
-            <div 
-              onClick={() => setShowProfileModal(true)}
-              className="flex items-center justify-between bg-slate-50 hover:bg-slate-100 p-3 rounded-xl border border-slate-200 shrink-0 cursor-pointer transition-colors group"
-              title="Klik untuk mengubah foto profil"
-            >
-              <div className="flex items-center gap-2.5">
+            <div className="relative group/profile flex justify-center">
+              <div 
+                onClick={() => setShowProfileModal(true)}
+                className="w-11 h-11 rounded-full cursor-pointer transition-transform hover:scale-105 active:scale-95 flex items-center justify-center border border-slate-200 overflow-hidden shadow-3xs bg-white shrink-0"
+              >
                 {profilePics[currentUser.nama] ? (
                   <img 
                     src={profilePics[currentUser.nama]} 
                     alt={currentUser.nama} 
-                    className="w-9 h-9 rounded-full object-cover border border-blue-200"
+                    className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0000FE] font-black text-xs uppercase shrink-0">
+                  <div className="w-full h-full bg-blue-50 flex items-center justify-center text-[#0000FE] font-black text-xs uppercase">
                     {currentUser.nama.substring(0, 2)}
                   </div>
                 )}
-                <div className="min-w-0">
-                  <h4 className="text-xs font-black text-slate-800 truncate leading-tight group-hover:text-[#0000FE] transition-colors">{currentUser.nama}</h4>
-                  <p className="text-[10px] text-slate-500 mt-0.5 font-semibold leading-normal">
-                    {currentUser.role === 'admin' 
-                      ? 'Administrator' 
-                      : currentUser.role === 'ustadz' 
-                      ? "Guru Al-Qur'an" 
-                      : (() => {
-                          const ustadzName = getUstadzForStudent(currentUser.id, currentUser.nama);
-                          return ustadzName ? `Guru Al-Qur'an: Ustadz ${ustadzName}` : 'Siswa / Wali Murid';
-                        })()
-                    }
-                  </p>
-                </div>
               </div>
-              <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+              {/* Tooltip */}
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/profile:opacity-100 group-hover/profile:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50 flex flex-col gap-0.5">
+                <span className="font-extrabold">{currentUser.nama}</span>
+                <span className="text-[10px] text-slate-300">
+                  {currentUser.role === 'admin' ? 'Administrator' : currentUser.role === 'ustadz' ? "Guru Al-Qur'an" : "Siswa / Wali Murid"}
+                </span>
+              </div>
             </div>
 
             {/* Navigation vertical list */}
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase px-2">Menu Utama</span>
+            <div className="flex flex-col gap-2.5 items-center w-full">
+              <span className="text-[9px] font-black tracking-wider text-slate-400 uppercase text-center block mb-1">Menu</span>
               
-              <button
-                id="tab-rekap-btn"
-                onClick={() => { setActiveTab('rekap'); setShowConfig(false); }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
-                  activeTab === 'rekap'
-                    ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <FileSpreadsheet className="w-4 h-4 text-[#0000FE]" />
-                Rekap Penilaian Tahfizh
-              </button>
-
-              <button
-                id="tab-tugas-btn"
-                onClick={() => { setActiveTab('tugas'); setShowConfig(false); }}
-                className={`flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
-                  activeTab === 'tugas'
-                    ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <ClipboardList className="w-4 h-4 text-[#0000FE]" />
-                  <span>Tugas Harian</span>
-                </div>
-                {tugasHarian.length > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-black ${
-                    activeTab === 'tugas' ? 'bg-[#0000FE] text-white' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {tugasHarian.length}
-                  </span>
-                )}
-              </button>
-
-              <button
-                id="tab-statistik-btn"
-                onClick={() => { setActiveTab('statistik'); setShowConfig(false); }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
-                  activeTab === 'statistik'
-                    ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <TrendingUp className="w-4 h-4 text-[#0000FE]" />
-                Statistik & Grafik
-              </button>
-
-              <button
-                id="tab-capaian-ziyadah-btn"
-                onClick={() => { setActiveTab('capaian_ziyadah'); setShowConfig(false); }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
-                  activeTab === 'capaian_ziyadah'
-                    ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <Award className="w-4 h-4 text-[#0000FE]" />
-                Capaian Target Ziyadah
-              </button>
-
-              {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
+              {/* Tab: Rekap */}
+              <div className="relative group/menu w-full flex justify-center">
                 <button
-                  id="tab-database-btn"
-                  onClick={() => { setActiveTab('database'); setShowConfig(false); }}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
-                    activeTab === 'database'
-                      ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  id="tab-rekap-btn"
+                  onClick={() => { setActiveTab('rekap'); setShowConfig(false); }}
+                  className={`flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
+                    activeTab === 'rekap'
+                      ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
                   }`}
                 >
-                  <BookOpen className="w-4 h-4 text-[#0000FE]" />
-                  <span>Database Ziyadah</span>
+                  <FileSpreadsheet className="w-5 h-5 text-[#0000FE]" />
                 </button>
+                {/* Tooltip Description */}
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                  Rekap Penilaian Tahfizh
+                </div>
+              </div>
+
+              {/* Tab: Tugas Harian */}
+              <div className="relative group/menu w-full flex justify-center">
+                <button
+                  id="tab-tugas-btn"
+                  onClick={() => { setActiveTab('tugas'); setShowConfig(false); }}
+                  className={`relative flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
+                    activeTab === 'tugas'
+                      ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
+                  }`}
+                >
+                  <ClipboardList className="w-5 h-5 text-[#0000FE]" />
+                  {tugasHarian.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-[#0000FE] text-white text-[8px] font-black px-1.5 py-0.5 rounded-full scale-90 border border-white">
+                      {tugasHarian.length}
+                    </span>
+                  )}
+                </button>
+                {/* Tooltip Description */}
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                  Tugas Harian
+                </div>
+              </div>
+
+              {/* Tab: Statistik */}
+              <div className="relative group/menu w-full flex justify-center">
+                <button
+                  id="tab-statistik-btn"
+                  onClick={() => { setActiveTab('statistik'); setShowConfig(false); }}
+                  className={`flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
+                    activeTab === 'statistik'
+                      ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
+                  }`}
+                >
+                  <TrendingUp className="w-5 h-5 text-[#0000FE]" />
+                </button>
+                {/* Tooltip Description */}
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                  Statistik & Grafik
+                </div>
+              </div>
+
+              {/* Tab: Capaian Target */}
+              <div className="relative group/menu w-full flex justify-center">
+                <button
+                  id="tab-capaian-ziyadah-btn"
+                  onClick={() => { setActiveTab('capaian_ziyadah'); setShowConfig(false); }}
+                  className={`flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
+                    activeTab === 'capaian_ziyadah'
+                      ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
+                  }`}
+                >
+                  <Award className="w-5 h-5 text-[#0000FE]" />
+                </button>
+                {/* Tooltip Description */}
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                  Capaian Target Ziyadah
+                </div>
+              </div>
+
+              {/* Tab: Database (only for ustadz/admin) */}
+              {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
+                <div className="relative group/menu w-full flex justify-center">
+                  <button
+                    id="tab-database-btn"
+                    onClick={() => { setActiveTab('database'); setShowConfig(false); }}
+                    className={`flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
+                      activeTab === 'database'
+                        ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <BookOpen className="w-5 h-5 text-[#0000FE]" />
+                  </button>
+                  {/* Tooltip Description */}
+                  <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                    Database Ziyadah
+                  </div>
+                </div>
               )}
             </div>
           </div>
 
           {/* Sidebar Footer with Class Info & Log Out */}
-          <div className="flex flex-col gap-4 mt-auto">
+          <div className="flex flex-col gap-3.5 mt-auto items-center">
             {/* Class Information Plate */}
-            <div className="bg-slate-50 p-3.5 rounded-xl space-y-2.5 border border-slate-200">
-              <div className="flex justify-between items-center">
-                <span className="text-[9px] font-black tracking-wider text-slate-400">INFORMASI KELAS</span>
-                <span className="bg-blue-50 border border-blue-100 text-[#0000FE] text-[9px] font-extrabold px-2 py-0.5 rounded">AL-WILDAN 10</span>
+            <div className="relative group/info flex justify-center">
+              <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-[#0000FE] transition-colors cursor-help">
+                <Info className="w-4.5 h-4.5" />
               </div>
-              
-              <div className="space-y-1.5 text-[10px] text-slate-600 font-semibold leading-none">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Guru Al-Qur'an:</span>
-                  <span className="font-bold text-slate-800">Ust. Tsaqif/Ust. Syuja/Ust. Salman</span>
+              {/* Tooltip */}
+              <div className="absolute left-full ml-3 bottom-0 bg-slate-900/95 text-white text-[10px] p-3 rounded-2xl shadow-lg opacity-0 pointer-events-none group-hover/info:opacity-100 group-hover/info:translate-x-1.5 transition-all duration-200 w-56 z-50 space-y-1">
+                <p className="font-black text-amber-400 border-b border-white/10 pb-1 uppercase tracking-wider text-[9px]">Informasi Kelas</p>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-400">Kelas:</span>
+                  <span className="font-bold text-white">AL-WILDAN 10</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-400">Guru Al-Qur'an:</span>
+                  <span className="font-bold text-white truncate max-w-[110px]" title="Ust. Tsaqif/Ust. Syuja/Ust. Salman">Ust. Tsaqif/Syuja/Salman</span>
+                </div>
+                <div className="flex justify-between gap-2">
                   <span className="text-slate-400">Tahun Ajaran:</span>
-                  <span className="font-bold text-slate-800">2026/2027</span>
+                  <span className="font-bold text-white">2026/2027</span>
                 </div>
               </div>
             </div>
 
             {/* Sync / Refresh Button */}
-            <button
-              id="btn-sync-sidebar"
-              onClick={handleManualSync}
-              disabled={isSyncing}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 transition-all disabled:opacity-50 cursor-pointer"
-              title="Sinkronisasi Data"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-[#0000FE] ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Mengupdate...' : 'Sinkronkan Data'}</span>
-            </button>
+            <div className="relative group/sync flex justify-center">
+              <button
+                id="btn-sync-sidebar"
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="w-10 h-10 flex items-center justify-center bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-full transition-all disabled:opacity-50 cursor-pointer shadow-3xs"
+              >
+                <RefreshCw className={`w-4 h-4 text-[#0000FE] ${isSyncing ? 'animate-spin' : ''}`} />
+              </button>
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/sync:opacity-100 group-hover/sync:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                {isSyncing ? 'Mengupdate...' : 'Sinkronkan Data'}
+              </div>
+            </div>
 
-            {/* Log Out button at bottom */}
-            <button
-              id="btn-logout-sidebar"
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-50 active:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              Keluar Sesi
-            </button>
+            {/* Log Out Button */}
+            <div className="relative group/logout flex justify-center">
+              <button
+                id="btn-logout-sidebar"
+                onClick={handleLogout}
+                className="w-10 h-10 flex items-center justify-center bg-rose-600 hover:bg-rose-700 text-white rounded-full transition-colors cursor-pointer shadow-3xs"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/logout:opacity-100 group-hover/logout:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                Keluar Sesi
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -2361,40 +2533,52 @@ export default function App() {
                   </div>
 
                   {/* Bagian Sinkronisasi Gmail Ustadz */}
-                  <div className="p-3.5 bg-slate-50 border border-slate-200/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-semibold">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-2.5 h-2.5 rounded-full ${ustadzGmailUser && ustadzGmailToken ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                      <div>
-                        <span className="text-slate-500 font-bold">Sinkronisasi Gmail Ustadz: </span>
-                        {ustadzGmailUser && ustadzGmailToken ? (
-                          <span className="text-emerald-600 font-black">{ustadzGmailUser.email} (Aktif)</span>
-                        ) : (
-                          <span className="text-slate-400 font-black">Belum Sinkron</span>
-                        )}
+                  <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex flex-col gap-3.5 text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-semibold">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-2.5 h-2.5 rounded-full ${ustadzGmailUser && ustadzGmailToken ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                        <div>
+                          <span className="text-slate-500 font-bold">Sinkronisasi Gmail Ustadz: </span>
+                          {ustadzGmailUser && ustadzGmailToken ? (
+                            <span className="text-emerald-600 font-black">{ustadzGmailUser.email} (Aktif)</span>
+                          ) : (
+                            <span className="text-slate-400 font-black">Belum Terhubung</span>
+                          )}
+                        </div>
                       </div>
+                      {ustadzGmailUser && ustadzGmailToken ? (
+                        <button
+                          type="button"
+                          onClick={handleDisconnectGmail}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-xl text-[10px] font-extrabold transition-all cursor-pointer"
+                        >
+                          Putuskan Koneksi
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isGmailSyncing}
+                          onClick={handleSyncGmail}
+                          className="px-4 py-2 bg-[#0000FE] hover:bg-[#0000D0] text-white rounded-xl text-[10px] font-black transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          {isGmailSyncing ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Mail className="w-3.5 h-3.5" />
+                          )}
+                          <span>Hubungkan Gmail Ustadz</span>
+                        </button>
+                      )}
                     </div>
-                    {ustadzGmailUser && ustadzGmailToken ? (
-                      <button
-                        type="button"
-                        onClick={handleDisconnectGmail}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                      >
-                        Putuskan Koneksi
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isGmailSyncing}
-                        onClick={handleSyncGmail}
-                        className="px-3 py-1.5 bg-[#0000FE] hover:bg-[#0000D0] text-white rounded-lg text-[10px] font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      >
-                        {isGmailSyncing ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Mail className="w-3 h-3" />
-                        )}
-                        <span>Hubungkan Gmail Ustadz</span>
-                      </button>
+                    
+                    {!ustadzGmailToken && (
+                      <div className="p-3 bg-blue-50/50 border border-blue-100/60 rounded-xl text-[10px] leading-relaxed text-blue-700/90 font-medium space-y-1">
+                        <p className="font-bold">💡 Tips Sinkronisasi:</p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          <li>Jika tombol diklik namun popup tidak muncul, silakan izinkan popup/pop-up blockers pada browser Anda.</li>
+                          <li>Karena preview berjalan di dalam frame (iFrame), beberapa browser membatasi Google Login. Jika gagal, silakan <strong>buka aplikasi ini di Tab Baru (Open in New Tab)</strong> menggunakan tombol di sudut kanan atas AI Studio.</li>
+                        </ul>
+                      </div>
                     )}
                   </div>
 

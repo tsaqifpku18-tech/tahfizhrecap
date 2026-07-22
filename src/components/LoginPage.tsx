@@ -64,6 +64,13 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
     fetchAccounts();
   }, [appsScriptUrl, usingDemoData]);
 
+  // Persist resolved accounts to localStorage for administrative user simulation
+  useEffect(() => {
+    if (accounts && accounts.length > 0) {
+      localStorage.setItem('tahfizh_all_accounts', JSON.stringify(accounts));
+    }
+  }, [accounts]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -194,8 +201,8 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
             </span>
           </h2>
           
-          <p className="mt-2 text-xs font-semibold text-slate-500 max-w-xs mx-auto lg:hidden">
-            Al-Wildan International Islamic School 10 Jakarta
+          <p className="mt-2 text-xs font-bold text-slate-500 max-w-md mx-auto">
+            A Project Dedicated by Ustadz Tsaqif & Ustadz Syuja. And Supported by Ustadz Istiqamah.
           </p>
         </div>
 

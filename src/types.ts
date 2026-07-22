@@ -31,6 +31,8 @@ export interface UserAccount {
   nama: string;
   password?: string;
   gmail?: string;
+  role?: 'admin' | 'ustadz' | 'siswa';
+  grade?: string;
 }
 
 export interface UserSession {
@@ -38,6 +40,7 @@ export interface UserSession {
   nama: string;
   role: 'admin' | 'ustadz' | 'siswa';
   gmail?: string;
+  grade?: string;
 }
 
 export interface TugasHarian {
