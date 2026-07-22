@@ -276,7 +276,7 @@ function doGet(e) {
       if (headerStr === "id" || headerStr === "id pengguna") idIdx = h;
       else if (headerStr === "namaa" || headerStr === "nama" || headerStr === "profil") namaaIdx = h;
       else if (headerStr === "password" || headerStr === "sandi" || headerStr === "pass") passIdx = h;
-      else if (headerStr === "gmail" || headerStr === "akun g-mail" || headerStr === "akun gmail" || headerStr === "email") gmailIdx = h;
+      else if (headerStr === "gmail" || headerStr === "g-mail" || headerStr === "akun g-mail" || headerStr === "akun gmail" || headerStr === "email") gmailIdx = h;
     }
     
     var accounts = [];
@@ -717,7 +717,7 @@ function doPost(e) {
         var gmailIdx = -1;
         for (var h = 0; h < headersAkun.length; h++) {
           var headerStr = String(headersAkun[h]).toLowerCase().trim();
-          if (headerStr === "gmail" || headerStr === "akun g-mail" || headerStr === "akun gmail" || headerStr === "email") {
+          if (headerStr === "gmail" || headerStr === "g-mail" || headerStr === "akun g-mail" || headerStr === "akun gmail" || headerStr === "email") {
             gmailIdx = h;
             break;
           }

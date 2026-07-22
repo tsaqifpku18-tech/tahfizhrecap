@@ -52,9 +52,11 @@ export const StatsCard: React.FC<StatsCardProps> = ({
     descClass = 'text-slate-400';
   }
 
+  const cardId = `stats-card-${String(title || 'untitled').toLowerCase().replace(/\s+/g, '-')}`;
+
   return (
     <div 
-      id={`stats-card-${title.toLowerCase().replace(/\s+/g, '-')}`} 
+      id={cardId} 
       className={`rounded-3xl p-6 border flex items-center justify-between transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 ${cardClass}`}
     >
       <div className="space-y-1">

@@ -246,7 +246,14 @@ export default function App() {
   // Capaian Target Ziyadah local edits and inline editing states
   const [capaianLocalEdits, setCapaianLocalEdits] = useState<{ [key: string]: { capaian: number, target: number } }>(() => {
     const saved = localStorage.getItem('capaian_local_edits');
-    return saved ? JSON.parse(saved) : {};
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse capaian_local_edits', e);
+      }
+    }
+    return {};
   });
   const [editingCapaianStudent, setEditingCapaianStudent] = useState<string | null>(null);
   const [editCapaianValue, setEditCapaianValue] = useState<number>(0);
@@ -275,7 +282,14 @@ export default function App() {
   // G-Mail Accounts State (Loaded from localStorage)
   const [gmailAccounts, setGmailAccounts] = useState<Record<string, string>>(() => {
     const saved = localStorage.getItem('tahfizh_gmail_accounts');
-    return saved ? JSON.parse(saved) : {};
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse tahfizh_gmail_accounts', e);
+      }
+    }
+    return {};
   });
 
   // Derived state for forward notifications
@@ -484,7 +498,14 @@ export default function App() {
   // Profile Picture States (Loaded from localStorage)
   const [profilePics, setProfilePics] = useState<Record<string, string>>(() => {
     const saved = localStorage.getItem('tahfizh_profile_pics');
-    return saved ? JSON.parse(saved) : {};
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse tahfizh_profile_pics', e);
+      }
+    }
+    return {};
   });
 
   // Custom Logo State (Loaded from localStorage)
@@ -553,7 +574,7 @@ export default function App() {
   };
 
   // Default Google Apps Script URL set by the developer
-  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxKLiG5gthvAB4oHzqpxIL0nkL57NejzsM9iTUwtjcYF_o1cYN_xIAmN9krRFcdhLuM/exec';
+  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyymGXp0mQ0vfcA2SU60oOBlyNSJ1PCGhoD5o8vV97kzooE-h-Pbrq_-LtfHU2fNavX/exec';
 
   // Settings state (Loaded from localStorage with fallback to default Apps Script URL)
   const [settings, setSettings] = useState<Settings>(() => {
@@ -585,7 +606,10 @@ export default function App() {
     const saved = localStorage.getItem('tahfizh_all_accounts');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(acc => acc && acc.id && acc.nama);
+        }
       } catch (e) {
         console.error('Failed to parse all accounts from localStorage', e);
       }
@@ -637,12 +661,15 @@ export default function App() {
     if (!adminAccountSearchQuery.trim()) return allAccounts;
     const query = adminAccountSearchQuery.toLowerCase().trim();
     return allAccounts.filter((acc) => {
-      const isUstadzByName = acc.nama.toLowerCase().includes('ustadz');
+      if (!acc) return false;
+      const nama = String(acc.nama || '').toLowerCase();
+      const id = String(acc.id || '').toLowerCase();
+      const isUstadzByName = nama.includes('ustadz');
       const roleLabel = acc.role === 'admin' ? 'admin' : (acc.role === 'ustadz' || isUstadzByName) ? 'ustadz' : 'siswa';
       return (
-        acc.nama.toLowerCase().includes(query) ||
+        nama.includes(query) ||
         roleLabel.includes(query) ||
-        acc.id.toLowerCase().includes(query)
+        id.includes(query)
       );
     });
   }, [allAccounts, adminAccountSearchQuery]);
@@ -653,7 +680,13 @@ export default function App() {
   const [halaqahStudentIds, setHalaqahStudentIds] = useState<string[]>(() => {
     if (currentUser && currentUser.role === 'ustadz') {
       const saved = localStorage.getItem(`halaqah_students_of_${currentUser.nama}`);
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error('Failed to parse halaqah_students', e);
+        }
+      }
     }
     return [];
   });
@@ -661,7 +694,15 @@ export default function App() {
   useEffect(() => {
     if (currentUser && currentUser.role === 'ustadz') {
       const saved = localStorage.getItem(`halaqah_students_of_${currentUser.nama}`);
-      setHalaqahStudentIds(saved ? JSON.parse(saved) : []);
+      if (saved) {
+        try {
+          setHalaqahStudentIds(JSON.parse(saved));
+          return;
+        } catch (e) {
+          console.error('Failed to parse halaqah_students in effect', e);
+        }
+      }
+      setHalaqahStudentIds([]);
     } else {
       setHalaqahStudentIds([]);
     }
@@ -696,7 +737,8 @@ export default function App() {
 
   const mergedCapaianZiyadah = useMemo(() => {
     return capaianZiyadah.map((item) => {
-      const key = item.nama.toLowerCase();
+      if (!item) return item;
+      const key = String(item.nama || '').toLowerCase();
       const localEdit = capaianLocalEdits[key];
       if (localEdit) {
         const percentage = localEdit.target > 0 ? Math.round((localEdit.capaian / localEdit.target) * 100) : 0;
@@ -708,11 +750,11 @@ export default function App() {
         };
       }
       return item;
-    });
+    }).filter(Boolean);
   }, [capaianZiyadah, capaianLocalEdits]);
 
   const uniqueCapaianGrades = useMemo(() => {
-    const grades = mergedCapaianZiyadah.map((c) => c.grade).filter(Boolean);
+    const grades = mergedCapaianZiyadah.map((c) => c?.grade).filter(Boolean);
     return ['All', ...Array.from(new Set(grades))];
   }, [mergedCapaianZiyadah]);
 
@@ -721,22 +763,23 @@ export default function App() {
     
     // If the logged in user is a student (role: 'siswa'), filter only their own data
     if (currentUser && currentUser.role === 'siswa') {
-      list = list.filter((item) => isStudentNameMatched(item.nama, currentUser.nama));
+      list = list.filter((item) => item && isStudentNameMatched(item.nama, currentUser.nama));
     }
     
     // If user filtered by grade:
     if (capaianGradeFilter !== 'All') {
-      list = list.filter((item) => item.grade === capaianGradeFilter);
+      list = list.filter((item) => item && item.grade === capaianGradeFilter);
     }
     
     // If user searched for name:
     if (capaianSearch.trim() !== '') {
       const query = capaianSearch.toLowerCase();
-      list = list.filter((item) => item.nama.toLowerCase().includes(query));
+      list = list.filter((item) => item && String(item.nama || '').toLowerCase().includes(query));
     }
     
     // Sort
     return [...list].sort((a, b) => {
+      if (!a || !b) return 0;
       const pctA = a.persentase !== undefined && a.persentase !== null
         ? a.persentase / 100
         : (a.target > 0 ? (a.capaian / a.target) : 0);
@@ -745,7 +788,7 @@ export default function App() {
         : (b.target > 0 ? (b.capaian / b.target) : 0);
       
       if (capaianSortBy === 'name') {
-        return a.nama.localeCompare(b.nama);
+        return String(a.nama || '').localeCompare(String(b.nama || ''));
       } else if (capaianSortBy === 'percentage_desc') {
         return pctB - pctA;
       } else if (capaianSortBy === 'percentage_asc') {
@@ -826,7 +869,8 @@ export default function App() {
       if (response.ok) {
         const res = await response.json();
         if (res && res.status === 'success' && Array.isArray(res.data)) {
-          setCapaianZiyadah(res.data);
+          const cleanCapaian = res.data.filter((item: any) => item && item.nama);
+          setCapaianZiyadah(cleanCapaian);
         }
       }
     } catch (err) {
@@ -849,8 +893,36 @@ export default function App() {
       if (response.ok) {
         const res = await response.json();
         if (res && res.status === 'success' && Array.isArray(res.data) && res.data.length > 0) {
-          setAllAccounts(res.data);
-          localStorage.setItem('tahfizh_all_accounts', JSON.stringify(res.data));
+          const cleanAccounts = res.data.filter((acc: any) => acc && acc.id && acc.nama);
+          setAllAccounts(cleanAccounts);
+          localStorage.setItem('tahfizh_all_accounts', JSON.stringify(cleanAccounts));
+
+          // Sync database G-MAIL column with local profile gmailAccounts
+          setGmailAccounts(prev => {
+            const updated = { ...prev };
+            cleanAccounts.forEach((acc: any) => {
+              if (acc.nama && acc.gmail) {
+                updated[acc.nama] = acc.gmail;
+              }
+            });
+            localStorage.setItem('tahfizh_gmail_accounts', JSON.stringify(updated));
+            return updated;
+          });
+
+          // Sync current logged-in/simulated user session's gmail with the database value
+          setCurrentUser(prevUser => {
+            if (!prevUser) return null;
+            const matchedAccount = cleanAccounts.find((acc: any) => 
+              (acc && acc.nama && prevUser.nama && acc.nama === prevUser.nama) || 
+              (acc && acc.id && prevUser.id && acc.id === prevUser.id)
+            );
+            if (matchedAccount && matchedAccount.gmail && matchedAccount.gmail !== prevUser.gmail) {
+              const updatedSession = { ...prevUser, gmail: matchedAccount.gmail };
+              localStorage.setItem('tahfizh_user_session', JSON.stringify(updatedSession));
+              return updatedSession;
+            }
+            return prevUser;
+          });
         }
       }
     } catch (err) {
@@ -1833,7 +1905,7 @@ export default function App() {
   }, [currentUser, activeStudentsList, halaqahStudentIds]);
 
   const handleSaveCapaianEdit = async (studentName: string, capaian: number, target: number) => {
-    const key = studentName.toLowerCase();
+    const key = String(studentName || '').toLowerCase();
     const updatedEdits = {
       ...capaianLocalEdits,
       [key]: { capaian, target }
@@ -1878,7 +1950,7 @@ export default function App() {
   };
 
   const handleResetCapaianEdit = (studentName: string) => {
-    const key = studentName.toLowerCase();
+    const key = String(studentName || '').toLowerCase();
     const updatedEdits = { ...capaianLocalEdits };
     delete updatedEdits[key];
     setCapaianLocalEdits(updatedEdits);
@@ -1997,11 +2069,12 @@ export default function App() {
                 className="bg-transparent border-none text-amber-950 font-black focus:outline-hidden cursor-pointer text-xs pr-1"
               >
                 {filteredSimulationAccounts.map((acc) => {
-                  const isUstadzByName = acc.nama.toLowerCase().includes('ustadz');
+                  const nama = String(acc.nama || '');
+                  const isUstadzByName = nama.toLowerCase().includes('ustadz');
                   const roleLabel = acc.role === 'admin' ? 'Admin' : (acc.role === 'ustadz' || isUstadzByName) ? 'Ustadz' : 'Siswa';
                   return (
-                    <option key={acc.id} value={acc.id} className="text-slate-800 bg-white font-semibold">
-                      {acc.nama} ({roleLabel})
+                    <option key={acc.id || ''} value={acc.id || ''} className="text-slate-800 bg-white font-semibold">
+                      {nama} ({roleLabel})
                     </option>
                   );
                 })}
@@ -3934,7 +4007,7 @@ export default function App() {
                           </div>
                           
                           <div className="flex items-center justify-between gap-1.5 pt-1.5">
-                            {capaianLocalEdits[item.nama.toLowerCase()] ? (
+                            {capaianLocalEdits[String(item.nama || '').toLowerCase()] ? (
                               <button
                                 onClick={() => handleResetCapaianEdit(item.nama)}
                                 className="px-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[9px] py-1 font-bold flex items-center gap-1 transition-all border border-rose-100"

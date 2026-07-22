@@ -61,7 +61,17 @@ export function ProfileSettingsModal({
   const [halaqahGradeFilter, setHalaqahGradeFilter] = useState<string>('All');
   const [selectedHalaqahIds, setSelectedHalaqahIds] = useState<string[]>(() => {
     const saved = localStorage.getItem(`halaqah_students_of_${currentUser.nama}`);
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error('Failed to parse halaqah students from localStorage in settings modal', e);
+      }
+    }
+    return [];
   });
 
   // General Notification toast
@@ -100,7 +110,7 @@ export function ProfileSettingsModal({
     if (currentUser.role !== 'siswa') return null;
     const filtered = setoran.filter(
       (s) => isStudentNameMatched(s.nama, currentUser.nama) && 
-      (s.kegiatan === "Tahsin (IQRA')" || s.kegiatan.toLowerCase().includes('tahsin'))
+      (s.kegiatan === "Tahsin (IQRA')" || String(s.kegiatan || '').toLowerCase().includes('tahsin'))
     );
     if (filtered.length === 0) return null;
     return [...filtered].sort((a, b) => {
@@ -113,7 +123,7 @@ export function ProfileSettingsModal({
     if (currentUser.role !== 'siswa') return [];
     const filtered = setoran.filter(
       (s) => isStudentNameMatched(s.nama, currentUser.nama) && 
-      (s.kegiatan === 'Murojaah' || s.kegiatan.toLowerCase().includes('murojaah') || s.kegiatan.toLowerCase().includes('murajaah'))
+      (s.kegiatan === 'Murojaah' || String(s.kegiatan || '').toLowerCase().includes('murojaah') || String(s.kegiatan || '').toLowerCase().includes('murajaah'))
     );
     const surahs = filtered.map((s) => s.surah || '').filter(Boolean);
     return Array.from(new Set(surahs)).sort((a, b) => a.localeCompare(b));
@@ -127,8 +137,11 @@ export function ProfileSettingsModal({
 
   const filteredHalaqahStudents = useMemo(() => {
     return activeStudents.filter((student) => {
-      const matchesSearch = student.nama.toLowerCase().includes(halaqahSearch.toLowerCase()) ||
-                            (student.id || '').toLowerCase().includes(halaqahSearch.toLowerCase());
+      if (!student) return false;
+      const studentNama = String(student.nama || '').toLowerCase();
+      const searchQueryLower = String(halaqahSearch || '').toLowerCase();
+      const matchesSearch = studentNama.includes(searchQueryLower) ||
+                            String(student.id || '').toLowerCase().includes(searchQueryLower);
       const matchesGrade = halaqahGradeFilter === 'All' || student.grade === halaqahGradeFilter;
       return matchesSearch && matchesGrade;
     });

@@ -215,7 +215,8 @@ export const NewAssessmentForm: React.FC<NewAssessmentFormProps> = ({
 
       // Parse surah, dari, sampai
       const parsed = parseSurahString(editingRecord.surah || '');
-      const foundSurah = SURAH_LIST.find(s => s.nama.toLowerCase().trim() === parsed.name.toLowerCase().trim());
+      const parsedNameLower = String(parsed && parsed.name ? parsed.name : '').toLowerCase().trim();
+      const foundSurah = SURAH_LIST.find(s => s && s.nama && s.nama.toLowerCase().trim() === parsedNameLower);
       if (foundSurah) {
         setSelectedSurahName(foundSurah.nama);
         setAyatDari(parsed.dari);

@@ -16,9 +16,11 @@ interface DatabaseTabProps {
 export const getSurahRank = (surahStr: string): number => {
   if (!surahStr) return -1;
   const parsed = parseSurahString(surahStr);
-  const cleanedParsedName = parsed.name.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+  const parsedName = parsed && parsed.name ? String(parsed.name) : '';
+  const cleanedParsedName = parsedName.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
   
   const matchedSurah = SURAH_LIST.find(s => {
+    if (!s || !s.nama) return false;
     const cleanedListName = s.nama.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
     return cleanedListName === cleanedParsedName || cleanedListName.includes(cleanedParsedName) || cleanedParsedName.includes(cleanedListName);
   });
@@ -41,17 +43,17 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
   // Helper to find a student's Gmail robustly
   const getStudentGmail = (nama: string) => {
     if (!nama) return '';
-    const nameLower = nama.toLowerCase().trim();
+    const nameLower = String(nama).toLowerCase().trim();
     
     // Try exact match in keys
     for (const key of Object.keys(gmailAccounts)) {
-      if (key.toLowerCase().trim() === nameLower) {
+      if (String(key).toLowerCase().trim() === nameLower) {
         return gmailAccounts[key];
       }
     }
     // Try partial/includes match
     for (const key of Object.keys(gmailAccounts)) {
-      const kLower = key.toLowerCase().trim();
+      const kLower = String(key).toLowerCase().trim();
       if (kLower.includes(nameLower) || nameLower.includes(kLower)) {
         return gmailAccounts[key];
       }
@@ -72,8 +74,9 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
     }> = {};
 
     setoran.forEach((record) => {
+      if (!record || !record.nama) return;
       // We only aggregate 'Ziyadah' records
-      const isZiyadah = record.kegiatan && record.kegiatan.toLowerCase() === 'ziyadah';
+      const isZiyadah = record.kegiatan && String(record.kegiatan).toLowerCase() === 'ziyadah';
       if (!isZiyadah) return;
 
       const studentKey = record.nama.trim();
@@ -99,7 +102,9 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
 
       if (record.surah) {
         const parsed = parseSurahString(record.surah);
-        sData.surahs.add(parsed.name);
+        if (parsed && parsed.name) {
+          sData.surahs.add(parsed.name);
+        }
 
         const currentRank = getSurahRank(record.surah);
         if (currentRank > sData.highestSurahRank) {
@@ -121,7 +126,8 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
   // Filter and sort the aggregated list
   const filteredAndSortedStudents = useMemo(() => {
     let result = studentStats.filter(student => {
-      const matchesSearch = student.nama.toLowerCase().includes(searchQuery.toLowerCase());
+      const studentNama = student && student.nama ? String(student.nama) : '';
+      const matchesSearch = studentNama.toLowerCase().includes(String(searchQuery || '').toLowerCase());
       const matchesGrade = gradeFilter === 'All' || student.grade === gradeFilter;
       return matchesSearch && matchesGrade;
     });
