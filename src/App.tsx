@@ -35,9 +35,22 @@ import {
   Menu,
   X,
   Smile,
-  Frown
+  Frown,
+  Mail,
+  ExternalLink
 } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import firebaseConfig from '../firebase-applet-config.json';
 import { Setoran, Settings, UserSession, TugasHarian, CapaianTargetZiyadah } from './types';
+
+// Inisialisasi Firebase Auth untuk integrasi Gmail Ustadz
+const firebaseApp = initializeApp(firebaseConfig);
+const firebaseAuth = getAuth(firebaseApp);
+const googleAuthProvider = new GoogleAuthProvider();
+googleAuthProvider.addScope('https://www.googleapis.com/auth/gmail.send');
+googleAuthProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
+googleAuthProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
 import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH } from './data';
 import { StatsCard } from './components/StatsCard';
 import { NewAssessmentForm } from './components/NewAssessmentForm';
@@ -46,6 +59,7 @@ import { StatsCharts } from './components/StatsCharts';
 import { LoginPage } from './components/LoginPage';
 import { AlWildanLogo } from './components/AlWildanLogo';
 import { ProfileSettingsModal } from './components/ProfileSettingsModal';
+import { DatabaseTab } from './components/DatabaseTab';
 
 // Helper function to format date to dd MMMM yyyy (Indonesian)
 const formatTanggalIndo = (tanggalStr: string): string => {
@@ -207,8 +221,21 @@ export default function App() {
   const [setoran, setSetoran] = useState<Setoran[]>(DEMO_SETORAN);
   const [tugasHarian, setTugasHarian] = useState<TugasHarian[]>(DEMO_TUGAS_HARIAN);
   const [capaianZiyadah, setCapaianZiyadah] = useState<CapaianTargetZiyadah[]>(DEMO_CAPAIAN_TARGET_ZIYADAH);
-  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik' | 'capaian_ziyadah'>('rekap');
+  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik' | 'capaian_ziyadah' | 'database'>('rekap');
   const [editingTugas, setEditingTugas] = useState<TugasHarian | null>(null);
+  const [lastCreatedRecord, setLastCreatedRecord] = useState<{
+    studentName: string;
+    type: 'setoran' | 'tugas';
+    timestamp: number;
+  } | null>(null);
+  const [manualForwardEmail, setManualForwardEmail] = useState<string>('');
+  const [manualForwardStudentName, setManualForwardStudentName] = useState<string>('');
+  
+  // Google Auth & Gmail Sync States
+  const [ustadzGmailUser, setUstadzGmailUser] = useState<User | null>(null);
+  const [ustadzGmailToken, setUstadzGmailToken] = useState<string | null>(null);
+  const [isGmailSyncing, setIsGmailSyncing] = useState<boolean>(false);
+  
   const [isSubmittingTugas, setIsSubmittingTugas] = useState<boolean>(false);
   const [confirmDeleteTugas, setConfirmDeleteTugas] = useState<TugasHarian | null>(null);
   
@@ -242,6 +269,169 @@ export default function App() {
   const [editingSetoran, setEditingSetoran] = useState<Setoran | null>(null);
   const [confirmDeleteRecord, setConfirmDeleteRecord] = useState<Setoran | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // G-Mail Accounts State (Loaded from localStorage)
+  const [gmailAccounts, setGmailAccounts] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('tahfizh_gmail_accounts');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Derived state for forward notifications
+  const forwardStudentName = useMemo(() => {
+    if (manualForwardStudentName) return manualForwardStudentName;
+    if (lastCreatedRecord?.studentName) return lastCreatedRecord.studentName;
+    if (manualForwardEmail) {
+      const emailLower = manualForwardEmail.toLowerCase().trim();
+      for (const [name, email] of Object.entries(gmailAccounts)) {
+        if (typeof email === 'string' && email.toLowerCase().trim() === emailLower) {
+          return name;
+        }
+      }
+    }
+    return '';
+  }, [manualForwardStudentName, lastCreatedRecord, manualForwardEmail, gmailAccounts]);
+
+  const getStudentGmail = (nama: string) => {
+    if (!nama) return '';
+    const nameLower = nama.toLowerCase().trim();
+    for (const key of Object.keys(gmailAccounts)) {
+      if (key.toLowerCase().trim() === nameLower) {
+        return gmailAccounts[key];
+      }
+    }
+    for (const key of Object.keys(gmailAccounts)) {
+      const kLower = key.toLowerCase().trim();
+      if (kLower.includes(nameLower) || nameLower.includes(kLower)) {
+        return gmailAccounts[key];
+      }
+    }
+    return '';
+  };
+
+  const forwardEmail = useMemo(() => {
+    if (manualForwardEmail) return manualForwardEmail;
+    return getStudentGmail(forwardStudentName);
+  }, [forwardStudentName, gmailAccounts, manualForwardEmail]);
+
+  const handleSyncGmail = async () => {
+    setIsGmailSyncing(true);
+    try {
+      const result = await signInWithPopup(firebaseAuth, googleAuthProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        setUstadzGmailToken(credential.accessToken);
+        setUstadzGmailUser(result.user);
+        alert(`Alhamdulillah, berhasil menyinkronkan akun Gmail Ustadz: ${result.user.email}`);
+      } else {
+        throw new Error("Gagal memperoleh token akses Gmail dari Google Auth.");
+      }
+    } catch (err: any) {
+      console.error("Gmail synchronization failed:", err);
+      alert(`Gagal sinkronisasi Gmail: ${err?.message || err}`);
+    } finally {
+      setIsGmailSyncing(false);
+    }
+  };
+
+  const handleDisconnectGmail = async () => {
+    try {
+      await signOut(firebaseAuth);
+      setUstadzGmailToken(null);
+      setUstadzGmailUser(null);
+      alert("Koneksi Gmail Ustadz berhasil diputus.");
+    } catch (err: any) {
+      console.error("Gmail logout failed:", err);
+    }
+  };
+
+  const buildGmailRaw = (to: string, subject: string, message: string) => {
+    const emailParts = [
+      `To: ${to}`,
+      'Content-Type: text/plain; charset=utf-8',
+      'MIME-Version: 1.0',
+      `Subject: ${subject}`,
+      '',
+      message
+    ];
+    const email = emailParts.join('\r\n');
+    return btoa(unescape(encodeURIComponent(email)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  };
+
+  const handleSendForwardMessage = async () => {
+    if (!forwardEmail) return;
+    const messageBody = `[REMINDER] Alhamdulillah, homework has been shared to your Tahfizh Recap Account. Please check now, and thank you. Baarokallahu Fiykum.`;
+    const subject = `[REMINDER] Tahfizh Al-Wildan`;
+    
+    // Jika token Gmail Ustadz tersedia, kirim langsung via Gmail API
+    if (ustadzGmailToken) {
+      try {
+        const rawMessage = buildGmailRaw(forwardEmail, subject, messageBody);
+        const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${ustadzGmailToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ raw: rawMessage })
+        });
+
+        if (response.ok) {
+          alert(`Alhamdulillah, notifikasi berhasil dikirim langsung via Gmail Anda ke ${forwardStudentName || 'Siswa'} (${forwardEmail})!`);
+          setLastCreatedRecord(null);
+          setManualForwardEmail('');
+          setManualForwardStudentName('');
+          return;
+        } else {
+          const errData = await response.json();
+          console.error('Failed to send email via Gmail API:', errData);
+          if (response.status === 401) {
+            alert('Sesi Gmail Anda telah kedaluwarsa. Silakan sinkronkan ulang akun Gmail Anda.');
+            setUstadzGmailToken(null);
+            setUstadzGmailUser(null);
+            return;
+          }
+          throw new Error(errData?.error?.message || 'Gagal mengirim email.');
+        }
+      } catch (err: any) {
+        console.error('Error sending email via Gmail API:', err);
+        alert(`Gagal mengirim via Gmail API (${err.message}). Menggunakan metode fallback mailto...`);
+      }
+    }
+
+    // Fallback ke metode pengiriman background via Apps Script dan mailto client
+    if (settings.appsScriptUrl) {
+      try {
+        await fetch(settings.appsScriptUrl, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({
+            action: 'sendEmail',
+            email: forwardEmail,
+            subject: subject,
+            body: messageBody,
+            siswa: forwardStudentName
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to send background email:', err);
+      }
+    }
+
+    const mailtoUrl = `mailto:${forwardEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(messageBody)}`;
+    window.open(mailtoUrl, '_blank');
+    
+    alert(`Alhamdulillah, notifikasi berhasil di-forward untuk ${forwardStudentName || 'Siswa'} (${forwardEmail})!`);
+    setLastCreatedRecord(null);
+    setManualForwardEmail('');
+    setManualForwardStudentName('');
+  };
 
   // Undo States
   const [lastAction, setLastAction] = useState<{
@@ -286,12 +476,6 @@ export default function App() {
   // Profile Picture States (Loaded from localStorage)
   const [profilePics, setProfilePics] = useState<Record<string, string>>(() => {
     const saved = localStorage.getItem('tahfizh_profile_pics');
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  // G-Mail Accounts State (Loaded from localStorage)
-  const [gmailAccounts, setGmailAccounts] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem('tahfizh_gmail_accounts');
     return saved ? JSON.parse(saved) : {};
   });
 
@@ -411,6 +595,14 @@ export default function App() {
       setHalaqahStudentIds([]);
     }
   }, [currentUser]);
+
+  // Efek untuk mendengarkan status autentikasi Firebase Google/Gmail
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setUstadzGmailUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Capaian Ziyadah Target States
   const [capaianSearch, setCapaianSearch] = useState<string>('');
@@ -692,6 +884,13 @@ export default function App() {
         type: 'add',
         data: recordWithId,
       });
+      setLastCreatedRecord({
+        studentName: recordWithId.nama,
+        type: 'setoran',
+        timestamp: Date.now()
+      });
+      setManualForwardEmail('');
+      setManualForwardStudentName('');
       setShowUndoToast(true);
       return true;
     }
@@ -751,6 +950,13 @@ export default function App() {
           type: 'add',
           data: recordWithId,
         });
+        setLastCreatedRecord({
+          studentName: recordWithId.nama,
+          type: 'setoran',
+          timestamp: Date.now()
+        });
+        setManualForwardEmail('');
+        setManualForwardStudentName('');
         setShowUndoToast(true);
         return true;
       } else {
@@ -948,6 +1154,13 @@ export default function App() {
         });
         setShowUndoToast(true);
         return true;
+      } else if (res && res.status === 'error' && String(res.message || '').toLowerCase().includes('tidak ditemukan')) {
+        // Jika data sudah tidak ditemukan di Sheets, hapus dari state lokal agar tidak menyangkut di UI
+        setSetoran((prev) => prev.filter((s) => s.id !== recordToDelete.id));
+        if (editingSetoran?.id === recordToDelete.id) {
+          setEditingSetoran(null);
+        }
+        return true;
       } else {
         throw new Error(res.message || 'Gagal menghapus data.');
       }
@@ -1067,6 +1280,13 @@ export default function App() {
     if (usingDemoData || !settings.appsScriptUrl) {
       setTugasHarian((prev) => [recordWithId, ...prev]);
       setIsSubmittingTugas(false);
+      setLastCreatedRecord({
+        studentName: recordWithId.siswa || 'Semua Siswa',
+        type: 'tugas',
+        timestamp: Date.now()
+      });
+      setManualForwardEmail('');
+      setManualForwardStudentName('');
       return true;
     }
 
@@ -1089,6 +1309,13 @@ export default function App() {
       if (res && res.status === 'success') {
         await fetchTugasHarian(settings.appsScriptUrl);
         setIsSubmittingTugas(false);
+        setLastCreatedRecord({
+          studentName: recordWithId.siswa || 'Semua Siswa',
+          type: 'tugas',
+          timestamp: Date.now()
+        });
+        setManualForwardEmail('');
+        setManualForwardStudentName('');
         return true;
       } else {
         throw new Error(res.message || 'Gagal menyimpan tugas harian.');
@@ -1174,6 +1401,13 @@ export default function App() {
       const res = await response.json();
       if (res && res.status === 'success') {
         await fetchTugasHarian(settings.appsScriptUrl);
+        if (editingTugas?.id === tugasToDelete.id) {
+          setEditingTugas(null);
+        }
+        return true;
+      } else if (res && res.status === 'error' && String(res.message || '').toLowerCase().includes('tidak ditemukan')) {
+        // Jika data sudah tidak ditemukan di Sheets, hapus dari state lokal agar tidak menyangkut di UI
+        setTugasHarian((prev) => prev.filter((t) => t.id !== tugasToDelete.id));
         if (editingTugas?.id === tugasToDelete.id) {
           setEditingTugas(null);
         }
@@ -1788,6 +2022,21 @@ export default function App() {
                 <Award className="w-4 h-4 text-[#0000FE]" />
                 Capaian Target Ziyadah
               </button>
+
+              {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
+                <button
+                  id="tab-database-btn"
+                  onClick={() => { setActiveTab('database'); setShowConfig(false); }}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 text-left w-full cursor-pointer ${
+                    activeTab === 'database'
+                      ? 'bg-blue-50 border border-blue-100 text-[#0000FE] shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4 text-[#0000FE]" />
+                  <span>Database Ziyadah</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1852,6 +2101,359 @@ export default function App() {
               Pantau rekapitulasi evaluasi setoran hafalan (Tahsin, Ziyadah & Murojaah) ananda secara berkala dan terstruktur. Semua data tersinkronisasi langsung secara real-time dengan Google Sheets milik asatidzah.
             </p>
           </div>
+
+          {/* Form & Forward Widgets - Pindah ke paling atas persis setelah kolom sambutan */}
+          {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
+            <div className="space-y-6">
+              {activeTab === 'rekap' && (
+                <NewAssessmentForm
+                  onAddSetoran={handleAddSetoran}
+                  activeStudents={allowedStudentsForForm}
+                  isSubmitting={isSubmitting}
+                  editingRecord={editingSetoran}
+                  onUpdateSetoran={handleUpdateSetoran}
+                  onCancelEdit={() => setEditingSetoran(null)}
+                />
+              )}
+
+              {activeTab === 'tugas' && (
+                <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Plus className="w-4 h-4 text-[#0000FE]" />
+                      {editingTugas ? 'Edit Tugas Harian' : 'Tambah Tugas Baru'}
+                    </h3>
+                    {editingTugas && (
+                      <button
+                        onClick={() => {
+                          setEditingTugas(null);
+                          setTugasFormMateri('');
+                          setTugasFormZiyadah('');
+                          setTugasFormMurojaah('');
+                          setTugasFormTugasMateri('');
+                          setTugasFormUstadz('');
+                          setTugasFormKeterangan('');
+                          setTugasFormSiswa('All');
+                        }}
+                        className="text-xs font-bold text-rose-500 hover:underline"
+                      >
+                        Batal Edit
+                      </button>
+                    )}
+                  </div>
+
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const isAnyMateriFilled = tugasFormZiyadah.trim() || tugasFormMurojaah.trim() || tugasFormTugasMateri.trim();
+                      if (!isAnyMateriFilled) {
+                        alert('Harap isi minimal salah satu tugas (Ziyadah, Murojaah, atau Materi)!');
+                        return;
+                      }
+                      
+                      const ustadzName = tugasFormUstadz.trim() || currentUser.nama;
+                      const combinedMateri = JSON.stringify({
+                        ziyadah: tugasFormZiyadah.trim(),
+                        murojaah: tugasFormMurojaah.trim(),
+                        tugasMateri: tugasFormTugasMateri.trim()
+                      });
+                      
+                      const payload = {
+                        tanggal: tugasFormTanggal,
+                        grade: tugasFormGrade,
+                        siswa: tugasFormSiswa,
+                        materi: combinedMateri,
+                        ustadz: ustadzName,
+                        keterangan: tugasFormKeterangan.trim(),
+                      };
+
+                      let success = false;
+                      if (editingTugas) {
+                        success = await handleUpdateTugas({
+                          ...editingTugas,
+                          ...payload,
+                        });
+                      } else {
+                        success = await handleAddTugas(payload);
+                      }
+
+                      if (success) {
+                        // Reset form
+                        setTugasFormMateri('');
+                        setTugasFormZiyadah('');
+                        setTugasFormMurojaah('');
+                        setTugasFormTugasMateri('');
+                        setTugasFormKeterangan('');
+                        setTugasFormSiswa('All');
+                      }
+                    }}
+                    className="space-y-4 text-xs font-sans"
+                  >
+                    {/* Tanggal */}
+                    <div className="space-y-1">
+                      <label className="block text-slate-500 font-bold">Tanggal Tugas</label>
+                      <input
+                        type="date"
+                        required
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
+                        value={tugasFormTanggal}
+                        onChange={(e) => setTugasFormTanggal(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Grade/Kelas */}
+                    <div className="space-y-1">
+                      <label className="block text-slate-500 font-bold">Untuk Kelas / Grade</label>
+                      <select
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
+                        value={tugasFormGrade}
+                        onChange={(e) => setTugasFormGrade(e.target.value)}
+                      >
+                        <option value="All">Semua Kelas (All)</option>
+                        {uniqueGrades.filter(g => g !== 'All' && g !== 'halaqah_saya').map((g, idx) => (
+                          <option key={`tugas-form-grade-${g}-${idx}`} value={g}>{g}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Siswa Spesifik (Opsional) */}
+                    <div className="space-y-1">
+                      <label className="block text-slate-500 font-bold flex items-center justify-between">
+                        <span>Untuk Siswa Spesifik (Opsional)</span>
+                        <span className="text-[10px] text-[#0000FE] font-black">Dari Spreadsheet</span>
+                      </label>
+                      <select
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
+                        value={tugasFormSiswa}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTugasFormSiswa(val);
+                          if (val && val !== 'All') {
+                            const foundStudent = activeStudentsList.find(s => s.nama === val);
+                            if (foundStudent && foundStudent.grade) {
+                              setTugasFormGrade(foundStudent.grade);
+                            }
+                          }
+                        }}
+                      >
+                        <option value="All">Semua Siswa (All)</option>
+                        {(currentUser.role === 'admin' ? activeStudentsList : allowedStudentsForForm).map((st, idx) => (
+                          <option key={`student-opt-${st.nama}-${idx}`} value={st.nama}>
+                            {st.nama} {st.grade ? `(${st.grade})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Tugas Ziyadah */}
+                    <div className="space-y-1">
+                      <label className="block text-slate-500 font-bold flex items-center justify-between">
+                        <span>Tugas Ziyadah</span>
+                        <span className="text-[10px] text-[#0000FE] font-black">Ziyadah</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Contoh: Juz 30 An-Naba' 1-15"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
+                        value={tugasFormZiyadah}
+                        onChange={(e) => setTugasFormZiyadah(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Tugas Murojaah */}
+                    <div className="space-y-1">
+                      <label className="block text-slate-500 font-bold flex items-center justify-between">
+                        <span>Tugas Murojaah</span>
+                        <span className="text-[10px] text-blue-600 font-black">Murojaah</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Contoh: Al-Mulk s/d Al-Qolam"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
+                        value={tugasFormMurojaah}
+                        onChange={(e) => setTugasFormMurojaah(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Tugas Materi */}
+                    <div className="space-y-1">
+                      <label className="block text-slate-500 font-bold flex items-center justify-between">
+                        <span>Tugas Materi</span>
+                        <span className="text-[10px] text-indigo-600 font-black font-semibold">Teori / Hafalan Baru</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Contoh: Pelajari hukum tajwid nun sukun & tanwin"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
+                        value={tugasFormTugasMateri}
+                        onChange={(e) => setTugasFormTugasMateri(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Ustadz */}
+                    <div className="space-y-1">
+                      <label className="block text-slate-500 font-bold">Ustadz / Guru Pemberi</label>
+                      <input
+                        type="text"
+                        placeholder={currentUser.nama}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
+                        value={tugasFormUstadz}
+                        onChange={(e) => setTugasFormUstadz(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Keterangan */}
+                    <div className="space-y-1">
+                      <label className="block text-slate-500 font-bold">Keterangan / Catatan Tambahan</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Catatan tambahan bagi siswa..."
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700"
+                        value={tugasFormKeterangan}
+                        onChange={(e) => setTugasFormKeterangan(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Submit button */}
+                    <button
+                      type="submit"
+                      disabled={isSubmittingTugas}
+                      className="w-full py-3 bg-[#0000FE] hover:bg-[#0000D0] text-white font-extrabold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 text-xs cursor-pointer"
+                    >
+                      {isSubmittingTugas ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Menyimpan...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          {editingTugas ? 'Simpan Perubahan' : 'Publish Tugas'}
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Forward Message Widget */}
+              {(activeTab === 'rekap' || activeTab === 'tugas') && (
+                <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200 space-y-4 animate-in fade-in slide-in-from-top duration-300">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-50 text-[#0000FE] rounded-xl border border-blue-100">
+                        <Mail className="w-4 h-4 text-[#0000FE]" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-800">Forward Reminder ke G-MAIL Siswa</h4>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">Kirim notifikasi email instan ke akun G-mail terdaftar milik siswa.</p>
+                      </div>
+                    </div>
+                    {lastCreatedRecord ? (
+                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wide">
+                        Berhasil Menyimpan: {lastCreatedRecord.studentName || 'Semua'} ({lastCreatedRecord.type === 'setoran' ? 'Penilaian' : 'Tugas'})
+                      </span>
+                    ) : (
+                      <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wide font-sans">
+                        Menunggu Input Data
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Bagian Sinkronisasi Gmail Ustadz */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-200/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-semibold">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-2.5 h-2.5 rounded-full ${ustadzGmailUser && ustadzGmailToken ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                      <div>
+                        <span className="text-slate-500 font-bold">Sinkronisasi Gmail Ustadz: </span>
+                        {ustadzGmailUser && ustadzGmailToken ? (
+                          <span className="text-emerald-600 font-black">{ustadzGmailUser.email} (Aktif)</span>
+                        ) : (
+                          <span className="text-slate-400 font-black">Belum Sinkron</span>
+                        )}
+                      </div>
+                    </div>
+                    {ustadzGmailUser && ustadzGmailToken ? (
+                      <button
+                        type="button"
+                        onClick={handleDisconnectGmail}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                      >
+                        Putuskan Koneksi
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isGmailSyncing}
+                        onClick={handleSyncGmail}
+                        className="px-3 py-1.5 bg-[#0000FE] hover:bg-[#0000D0] text-white rounded-lg text-[10px] font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {isGmailSyncing ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Mail className="w-3 h-3" />
+                        )}
+                        <span>Hubungkan Gmail Ustadz</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider">Nama Siswa</label>
+                      <input
+                        type="text"
+                        placeholder="Ketik nama siswa atau otomatis terisi dari email..."
+                        value={forwardStudentName}
+                        onChange={(e) => setManualForwardStudentName(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider font-sans">Alamat G-MAIL Siswa</label>
+                      <input
+                        type="email"
+                        placeholder="Auto-populated atau isi manual jika kosong..."
+                        value={forwardEmail}
+                        onChange={(e) => setManualForwardEmail(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider">Isi Pesan Notifikasi</label>
+                    <textarea
+                      readOnly
+                      rows={2}
+                      className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 leading-relaxed cursor-not-allowed focus:outline-none"
+                      value={`[REMINDER] Alhamdulillah, homework has been shared to your Tahfizh Recap Account. Please check now, and thank you. Baarokallahu Fiykum.`}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={!lastCreatedRecord || !forwardEmail}
+                    onClick={handleSendForwardMessage}
+                    className={`w-full py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer ${
+                      lastCreatedRecord && forwardEmail
+                        ? 'bg-[#0000FE] hover:bg-[#0000D0] text-white active:scale-98'
+                        : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                    }`}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>
+                      {!lastCreatedRecord 
+                        ? 'Selesaikan Pengisian Form untuk Mengirim' 
+                        : ustadzGmailToken 
+                          ? `Kirim Langsung via Gmail (${ustadzGmailUser?.email || ''})` 
+                          : 'Kirim Notifikasi (Metode Manual)'}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Spreadsheet Config Guide / Panel (Renders inside the main content view if toggled) */}
           {showConfig && (
@@ -2000,18 +2602,6 @@ export default function App() {
                   Buka Pop-up Informasi
                 </button>
               </div>
-            )}
-
-            {/* Form Catat Penilaian Baru (Ustadz/Admin) - Top of Rekap Tab */}
-            {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
-              <NewAssessmentForm
-                onAddSetoran={handleAddSetoran}
-                activeStudents={allowedStudentsForForm}
-                isSubmitting={isSubmitting}
-                editingRecord={editingSetoran}
-                onUpdateSetoran={handleUpdateSetoran}
-                onCancelEdit={() => setEditingSetoran(null)}
-              />
             )}
 
             {/* Content Bento Grid: Form & Student Table with search/filters */}
@@ -2668,9 +3258,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* "Lihat Informasi Terbaru" Quick Button/Banner for Student Account */}
+            </div>            {/* "Lihat Informasi Terbaru" Quick Button/Banner for Student Account */}
             {currentUser?.role === 'siswa' && (
               <div className="w-full bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs animate-in fade-in duration-300">
                 <div className="flex items-center gap-3">
@@ -2688,225 +3276,6 @@ export default function App() {
                 >
                   Buka Pop-up Informasi
                 </button>
-              </div>
-            )}            {/* Form Tambah Tugas Baru (Ustadz/Admin) - Top of Tugas Tab */}
-            {(currentUser?.role === 'ustadz' || currentUser?.role === 'admin') && (
-              <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <Plus className="w-4 h-4 text-[#0000FE]" />
-                    {editingTugas ? 'Edit Tugas Harian' : 'Tambah Tugas Baru'}
-                  </h3>
-                  {editingTugas && (
-                    <button
-                      onClick={() => {
-                        setEditingTugas(null);
-                        setTugasFormMateri('');
-                        setTugasFormZiyadah('');
-                        setTugasFormMurojaah('');
-                        setTugasFormTugasMateri('');
-                        setTugasFormUstadz('');
-                        setTugasFormKeterangan('');
-                        setTugasFormSiswa('All');
-                      }}
-                      className="text-xs font-bold text-rose-500 hover:underline"
-                    >
-                      Batal Edit
-                    </button>
-                  )}
-                </div>
-
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const isAnyMateriFilled = tugasFormZiyadah.trim() || tugasFormMurojaah.trim() || tugasFormTugasMateri.trim();
-                    if (!isAnyMateriFilled) {
-                      alert('Harap isi minimal salah satu tugas (Ziyadah, Murojaah, atau Materi)!');
-                      return;
-                    }
-                    
-                    const ustadzName = tugasFormUstadz.trim() || currentUser.nama;
-                    const combinedMateri = JSON.stringify({
-                      ziyadah: tugasFormZiyadah.trim(),
-                      murojaah: tugasFormMurojaah.trim(),
-                      tugasMateri: tugasFormTugasMateri.trim()
-                    });
-                    
-                    const payload = {
-                      tanggal: tugasFormTanggal,
-                      grade: tugasFormGrade,
-                      siswa: tugasFormSiswa,
-                      materi: combinedMateri,
-                      ustadz: ustadzName,
-                      keterangan: tugasFormKeterangan.trim(),
-                    };
-
-                    let success = false;
-                    if (editingTugas) {
-                      success = await handleUpdateTugas({
-                        ...editingTugas,
-                        ...payload,
-                      });
-                    } else {
-                      success = await handleAddTugas(payload);
-                    }
-
-                    if (success) {
-                      // Reset form
-                      setTugasFormMateri('');
-                      setTugasFormZiyadah('');
-                      setTugasFormMurojaah('');
-                      setTugasFormTugasMateri('');
-                      setTugasFormKeterangan('');
-                      setTugasFormSiswa('All');
-                    }
-                  }}
-                  className="space-y-4 text-xs font-sans"
-                >
-                  {/* Tanggal */}
-                  <div className="space-y-1">
-                    <label className="block text-slate-500 font-bold">Tanggal Tugas</label>
-                    <input
-                      type="date"
-                      required
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
-                      value={tugasFormTanggal}
-                      onChange={(e) => setTugasFormTanggal(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Grade/Kelas */}
-                  <div className="space-y-1">
-                    <label className="block text-slate-500 font-bold">Untuk Kelas / Grade</label>
-                    <select
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
-                      value={tugasFormGrade}
-                      onChange={(e) => setTugasFormGrade(e.target.value)}
-                    >
-                      <option value="All">Semua Kelas (All)</option>
-                      {uniqueGrades.filter(g => g !== 'All' && g !== 'halaqah_saya').map((g, idx) => (
-                        <option key={`tugas-form-grade-${g}-${idx}`} value={g}>{g}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Siswa Spesifik (Opsional) */}
-                  <div className="space-y-1">
-                    <label className="block text-slate-500 font-bold flex items-center justify-between">
-                      <span>Untuk Siswa Spesifik (Opsional)</span>
-                      <span className="text-[10px] text-[#0000FE] font-black">Dari Spreadsheet</span>
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold appearance-none bg-white"
-                      value={tugasFormSiswa}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setTugasFormSiswa(val);
-                        if (val && val !== 'All') {
-                          const foundStudent = activeStudentsList.find(s => s.nama === val);
-                          if (foundStudent && foundStudent.grade) {
-                            setTugasFormGrade(foundStudent.grade);
-                          }
-                        }
-                      }}
-                    >
-                      <option value="All">Semua Siswa (All)</option>
-                      {(currentUser.role === 'admin' ? activeStudentsList : allowedStudentsForForm).map((st, idx) => (
-                        <option key={`student-opt-${st.nama}-${idx}`} value={st.nama}>
-                          {st.nama} {st.grade ? `(${st.grade})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Tugas Ziyadah */}
-                  <div className="space-y-1">
-                    <label className="block text-slate-500 font-bold flex items-center justify-between">
-                      <span>Tugas Ziyadah</span>
-                      <span className="text-[10px] text-[#0000FE] font-black">Ziyadah</span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Contoh: Juz 30 An-Naba' 1-15"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
-                      value={tugasFormZiyadah}
-                      onChange={(e) => setTugasFormZiyadah(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Tugas Murojaah */}
-                  <div className="space-y-1">
-                    <label className="block text-slate-500 font-bold flex items-center justify-between">
-                      <span>Tugas Murojaah</span>
-                      <span className="text-[10px] text-blue-600 font-black">Murojaah</span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Contoh: Al-Mulk s/d Al-Qolam"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
-                      value={tugasFormMurojaah}
-                      onChange={(e) => setTugasFormMurojaah(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Tugas Materi */}
-                  <div className="space-y-1">
-                    <label className="block text-slate-500 font-bold flex items-center justify-between">
-                      <span>Tugas Materi</span>
-                      <span className="text-[10px] text-indigo-600 font-black font-semibold">Teori / Hafalan Baru</span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Contoh: Pelajari hukum tajwid nun sukun & tanwin"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-semibold"
-                      value={tugasFormTugasMateri}
-                      onChange={(e) => setTugasFormTugasMateri(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Ustadz */}
-                  <div className="space-y-1">
-                    <label className="block text-slate-500 font-bold">Ustadz / Guru Pemberi</label>
-                    <input
-                      type="text"
-                      placeholder={currentUser.nama}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700 font-medium"
-                      value={tugasFormUstadz}
-                      onChange={(e) => setTugasFormUstadz(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Keterangan */}
-                  <div className="space-y-1">
-                    <label className="block text-slate-500 font-bold">Keterangan / Catatan Tambahan</label>
-                    <textarea
-                      rows={3}
-                      placeholder="Catatan tambahan bagi siswa..."
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE] text-slate-700"
-                      value={tugasFormKeterangan}
-                      onChange={(e) => setTugasFormKeterangan(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Submit button */}
-                  <button
-                    type="submit"
-                    disabled={isSubmittingTugas}
-                    className="w-full py-3 bg-[#0000FE] hover:bg-[#0000D0] text-white font-extrabold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 text-xs cursor-pointer"
-                  >
-                    {isSubmittingTugas ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Menyimpan...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        {editingTugas ? 'Simpan Perubahan' : 'Publish Tugas'}
-                      </>
-                    )}
-                  </button>
-                </form>
               </div>
             )}
 
@@ -3448,6 +3817,24 @@ export default function App() {
               )}
             </div>
           </div>
+        )}
+
+        {activeTab === 'database' && (currentUser?.role === 'ustadz' || currentUser?.role === 'admin') && (
+          <DatabaseTab
+            setoran={setoran}
+            gmailAccounts={gmailAccounts}
+            onSendReminder={(studentName, email) => {
+              setLastCreatedRecord({
+                studentName,
+                type: 'setoran',
+                timestamp: Date.now()
+              });
+              setManualForwardEmail(email);
+              setManualForwardStudentName('');
+              // scroll up to form/widget container if needed
+              document.getElementById('tugas-form-container')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
         )}
 
           </div>

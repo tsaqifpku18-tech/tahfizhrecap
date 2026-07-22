@@ -1090,6 +1090,7 @@ function doPost(e) {
         }
       } else if (action === "delete") {
         var idToFind = String(postData.id || "").trim();
+        var deletedFromPenilaian = false;
         if (idToFind.indexOf("penilaian_tugas_") === 0) {
           var realId = idToFind.substring("penilaian_tugas_".length);
           var sheetPenilaian = ss.getSheetByName("Penilaian") || ss.getSheetByName("penilaian") || ss.getSheets()[0];
@@ -1108,16 +1109,16 @@ function doPost(e) {
               if (pTugasZiyadahIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasZiyadahIdx + 1).setValue("");
               if (pTugasMurojaahIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasMurojaahIdx + 1).setValue("");
               if (pTugasMateriIdx !== -1) sheetPenilaian.getRange(foundRowP, pTugasMateriIdx + 1).setValue("");
-              
-              return createJsonResponse({ status: "success", message: "Tugas harian berhasil dihapus." });
+              deletedFromPenilaian = true;
             }
           }
-          return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
         }
 
         var foundRow = findRowById(sheet, idToFind);
         if (foundRow !== -1) {
           sheet.deleteRow(foundRow);
+          return createJsonResponse({ status: "success", message: "Tugas harian berhasil dihapus." });
+        } else if (deletedFromPenilaian) {
           return createJsonResponse({ status: "success", message: "Tugas harian berhasil dihapus." });
         } else {
           return createJsonResponse({ status: "error", message: "Data tugas harian tidak ditemukan." });
