@@ -39,12 +39,13 @@ import {
   Mail,
   ExternalLink,
   ShieldCheck,
-  Info
+  Info,
+  Newspaper
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
-import { Setoran, Settings, UserSession, TugasHarian, CapaianTargetZiyadah, UserAccount } from './types';
+import { Setoran, Settings, UserSession, TugasHarian, CapaianTargetZiyadah, UserAccount, BeritaItem } from './types';
 
 // Inisialisasi Firebase Auth untuk integrasi Gmail Ustadz
 const firebaseApp = initializeApp(firebaseConfig);
@@ -53,7 +54,7 @@ const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.addScope('https://www.googleapis.com/auth/gmail.send');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
-import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH, DEMO_AKUN } from './data';
+import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH, DEMO_AKUN, DEMO_BERITA } from './data';
 import { StatsCard } from './components/StatsCard';
 import { NewAssessmentForm } from './components/NewAssessmentForm';
 import { StudentDetailModal } from './components/StudentDetailModal';
@@ -62,6 +63,8 @@ import { LoginPage } from './components/LoginPage';
 import { AlWildanLogo } from './components/AlWildanLogo';
 import { ProfileSettingsModal } from './components/ProfileSettingsModal';
 import { DatabaseTab } from './components/DatabaseTab';
+import { BeritaTab } from './components/BeritaTab';
+import { RankingModal } from './components/RankingModal';
 
 // Helper function to format date to dd MMMM yyyy (Indonesian)
 const formatTanggalIndo = (tanggalStr: string): string => {
@@ -104,6 +107,18 @@ const isStudentNameMatched = (setoranName: string, studentProfileName: string): 
   
   // If there are words in common (e.g. "Azzam Malik" and "Azzam"), it is a match
   return sWords.some(w => pWords.includes(w));
+};
+
+// Helper to perform smart grade matching (e.g. "Kelas 7A" and "7A" or "7 A")
+export const isGradeMatched = (g1: string, g2: string): boolean => {
+  if (!g1 || !g2) return false;
+  const str1 = String(g1).trim().toLowerCase();
+  const str2 = String(g2).trim().toLowerCase();
+  if (str1 === 'all' || str2 === 'all' || str1 === 'semua' || str2 === 'semua') return true;
+  if (str1 === str2) return true;
+  const clean1 = str1.replace(/kelas|grade|\s+|-|_/g, '');
+  const clean2 = str2.replace(/kelas|grade|\s+|-|_/g, '');
+  return clean1 === clean2;
 };
 
 // Helper to parse the multi-column (split) task materi field
@@ -223,7 +238,83 @@ export default function App() {
   const [setoran, setSetoran] = useState<Setoran[]>(DEMO_SETORAN);
   const [tugasHarian, setTugasHarian] = useState<TugasHarian[]>(DEMO_TUGAS_HARIAN);
   const [capaianZiyadah, setCapaianZiyadah] = useState<CapaianTargetZiyadah[]>(DEMO_CAPAIAN_TARGET_ZIYADAH);
-  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik' | 'capaian_ziyadah' | 'database'>('rekap');
+  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik' | 'capaian_ziyadah' | 'database' | 'berita'>('rekap');
+  const [showRankingModal, setShowRankingModal] = useState<boolean>(false);
+
+  // Berita State
+  const [beritaList, setBeritaList] = useState<BeritaItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('alwildan_berita');
+      return saved ? JSON.parse(saved) : DEMO_BERITA;
+    } catch {
+      return DEMO_BERITA;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('alwildan_berita', JSON.stringify(beritaList));
+    } catch (e) {
+      console.error('Failed to save berita to localStorage', e);
+    }
+  }, [beritaList]);
+
+  const handleAddBerita = (newBerita: Omit<BeritaItem, 'id' | 'createdAt' | 'likes' | 'comments'>) => {
+    const item: BeritaItem = {
+      ...newBerita,
+      id: `berita_${Date.now()}`,
+      createdAt: new Date().toLocaleString('id-ID', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      likes: [],
+      comments: []
+    };
+    setBeritaList((prev) => [item, ...prev]);
+  };
+
+  const handleDeleteBerita = (id: string) => {
+    setBeritaList((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  const handleToggleLikeBerita = (beritaId: string) => {
+    if (!currentUser) return;
+    setBeritaList((prev) =>
+      prev.map((item) => {
+        if (item.id === beritaId) {
+          const isLiked = item.likes.includes(currentUser.nama);
+          const newLikes = isLiked
+            ? item.likes.filter((n) => n !== currentUser.nama)
+            : [...item.likes, currentUser.nama];
+          return { ...item, likes: newLikes };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleAddCommentBerita = (beritaId: string, commentText: string) => {
+    if (!currentUser || !commentText.trim()) return;
+    const commentObj = {
+      id: `comm_${Date.now()}`,
+      userName: currentUser.nama,
+      userRole: currentUser.role,
+      comment: commentText.trim(),
+      createdAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+    };
+    setBeritaList((prev) =>
+      prev.map((item) => {
+        if (item.id === beritaId) {
+          return { ...item, comments: [...item.comments, commentObj] };
+        }
+        return item;
+      })
+    );
+  };
+
   const [editingTugas, setEditingTugas] = useState<TugasHarian | null>(null);
   const [lastCreatedRecord, setLastCreatedRecord] = useState<{
     studentName: string;
@@ -763,35 +854,218 @@ export default function App() {
     return ['All', ...Array.from(new Set(grades))];
   }, [setoran, currentUser]);
 
-  const mergedCapaianZiyadah = useMemo(() => {
-    return capaianZiyadah.map((item) => {
-      if (!item) return item;
-      const key = String(item.nama || '').toLowerCase();
-      const localEdit = capaianLocalEdits[key];
-      if (localEdit) {
-        const percentage = localEdit.target > 0 ? Math.round((localEdit.capaian / localEdit.target) * 100) : 0;
-        return {
-          ...item,
-          capaian: localEdit.capaian,
-          target: localEdit.target,
-          persentase: percentage
+  // List of active students with ID & Grade for dropdown auto-population
+  const activeStudentsList = useMemo(() => {
+    const map: { [key: string]: { id: string; nama: string; grade: string } } = {};
+    setoran.forEach((s) => {
+      if (s.nama && !map[(s.nama || '').toLowerCase()]) {
+        map[(s.nama || '').toLowerCase()] = {
+          id: s.id || '',
+          nama: s.nama,
+          grade: s.grade || '',
         };
       }
-      return item;
-    }).filter(Boolean);
-  }, [capaianZiyadah, capaianLocalEdits]);
+    });
+    return Object.values(map).sort((a, b) => {
+      const gradeA = a.grade || '';
+      const gradeB = b.grade || '';
+      const gradeCompare = gradeA.localeCompare(gradeB);
+      if (gradeCompare !== 0) return gradeCompare;
+      return (a.nama || '').localeCompare(b.nama || '');
+    });
+  }, [setoran]);
+
+  const mergedCapaianZiyadah = useMemo(() => {
+    // Collect all student entities from database accounts, active student lists, capaian_ziyadah table, and setoran logs
+    const studentMap = new Map<string, {
+      id: string;
+      nama: string;
+      grade: string;
+      sheetCapaian: number;
+      target: number;
+    }>();
+
+    // First seed from allAccounts (role: 'siswa')
+    allAccounts.forEach((acc) => {
+      if (acc && acc.nama && acc.role === 'siswa') {
+        const key = acc.nama.toLowerCase().trim();
+        if (!studentMap.has(key)) {
+          studentMap.set(key, {
+            id: acc.id || `acc_${key}`,
+            nama: acc.nama,
+            grade: acc.grade || '7A',
+            sheetCapaian: 0,
+            target: 300,
+          });
+        }
+      }
+    });
+
+    // Seed from activeStudentsList
+    activeStudentsList.forEach((st) => {
+      if (st && st.nama) {
+        const key = st.nama.toLowerCase().trim();
+        if (!studentMap.has(key)) {
+          studentMap.set(key, {
+            id: st.id || `st_${key}`,
+            nama: st.nama,
+            grade: st.grade || '7A',
+            sheetCapaian: 0,
+            target: 300,
+          });
+        }
+      }
+    });
+
+    // Seed from capaianZiyadah tab
+    capaianZiyadah.forEach((cz) => {
+      if (cz && cz.nama) {
+        const key = cz.nama.toLowerCase().trim();
+        const existing = studentMap.get(key);
+        if (existing) {
+          existing.sheetCapaian = cz.capaian || 0;
+          existing.target = cz.target || existing.target || 300;
+          if (cz.grade) existing.grade = cz.grade;
+        } else {
+          studentMap.set(key, {
+            id: cz.id || `cz_${key}`,
+            nama: cz.nama,
+            grade: cz.grade || '7A',
+            sheetCapaian: cz.capaian || 0,
+            target: cz.target || 300,
+          });
+        }
+      }
+    });
+
+    // Calculate total Ziyadah setoran lines from setoran database for each student
+    const result: CapaianTargetZiyadah[] = [];
+
+    studentMap.forEach((stData, key) => {
+      // Find all setoran entries from database for this student with kegiatan 'ziyadah'
+      const studentSetorans = setoran.filter(
+        (s) => s && isStudentNameMatched(s.nama, stData.nama) && s.kegiatan && s.kegiatan.toLowerCase().includes('ziyadah')
+      );
+      const totalSetoranBaris = studentSetorans.reduce((acc, curr) => acc + (Number(curr.baris) || 0), 0);
+
+      // Total capaian = max of sheet specified base capaian or sum of Ziyadah setoran entries
+      let finalCapaian = Math.max(stData.sheetCapaian, totalSetoranBaris);
+      let finalTarget = stData.target > 0 ? stData.target : 300;
+
+      // Check for local overrides if user manually edited
+      const localEdit = capaianLocalEdits[key];
+      if (localEdit) {
+        finalCapaian = localEdit.capaian;
+        finalTarget = localEdit.target;
+      }
+
+      const percentage = finalTarget > 0 ? Math.round((finalCapaian / finalTarget) * 100) : 0;
+
+      result.push({
+        id: stData.id,
+        nama: stData.nama,
+        grade: stData.grade,
+        capaian: finalCapaian,
+        target: finalTarget,
+        persentase: percentage,
+      });
+    });
+
+    return result;
+  }, [allAccounts, activeStudentsList, capaianZiyadah, setoran, capaianLocalEdits]);
 
   const uniqueCapaianGrades = useMemo(() => {
     const grades = mergedCapaianZiyadah.map((c) => c?.grade).filter(Boolean);
     return ['All', ...Array.from(new Set(grades))];
   }, [mergedCapaianZiyadah]);
 
+  // Student Rank Info for Sidebar Icon & Quick View
+  const studentRankInfo = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'siswa') return null;
+
+    const myGrade = currentUser.grade || '7A';
+    const targetGrade = myGrade;
+
+    const studentMap = new Map<string, { nama: string; totalBaris: number; totalSetoran: number }>();
+
+    // Seed active students
+    activeStudentsList.forEach((st) => {
+      if (!st.grade || isGradeMatched(st.grade, targetGrade)) {
+        const key = st.nama.toLowerCase().trim();
+        if (!studentMap.has(key)) {
+          studentMap.set(key, { nama: st.nama, totalBaris: 0, totalSetoran: 0 });
+        }
+      }
+    });
+
+    // Seed capaian Ziyadah
+    capaianZiyadah.forEach((cz) => {
+      if (isGradeMatched(cz.grade, targetGrade)) {
+        const key = cz.nama.toLowerCase().trim();
+        const existing = studentMap.get(key) || { nama: cz.nama, totalBaris: 0, totalSetoran: 0 };
+        existing.totalBaris = Math.max(existing.totalBaris, cz.capaian || 0);
+        studentMap.set(key, existing);
+      }
+    });
+
+    // Sum setoran
+    setoran.forEach((s) => {
+      if (isGradeMatched(s.grade, targetGrade)) {
+        const key = s.nama.toLowerCase().trim();
+        const existing = studentMap.get(key) || { nama: s.nama, totalBaris: 0, totalSetoran: 0 };
+        existing.totalSetoran += 1;
+        if (s.kegiatan && s.kegiatan.toLowerCase().includes('ziyadah')) {
+          existing.totalBaris += Number(s.baris) || 0;
+        }
+        studentMap.set(key, existing);
+      }
+    });
+
+    const myKey = currentUser.nama.toLowerCase().trim();
+    if (!studentMap.has(myKey)) {
+      studentMap.set(myKey, { nama: currentUser.nama, totalBaris: 0, totalSetoran: 0 });
+    }
+
+    const sorted = Array.from(studentMap.values()).sort((a, b) => {
+      if (b.totalBaris !== a.totalBaris) return b.totalBaris - a.totalBaris;
+      return b.totalSetoran - a.totalSetoran;
+    });
+
+    const myIndex = sorted.findIndex((item) => isStudentNameMatched(item.nama, currentUser.nama));
+    const rank = myIndex !== -1 ? myIndex + 1 : 1;
+    const myData = myIndex !== -1 ? sorted[myIndex] : { totalBaris: 0, totalSetoran: 0 };
+
+    return {
+      rank,
+      totalStudents: sorted.length,
+      totalBaris: myData.totalBaris,
+      totalSetoran: myData.totalSetoran
+    };
+  }, [currentUser, setoran, capaianZiyadah, activeStudentsList]);
+
   const processedCapaianList = useMemo(() => {
     let list = mergedCapaianZiyadah;
     
-    // If the logged in user is a student (role: 'siswa'), filter only their own data
+    // If the logged in user is a student (role: 'siswa'), strictly restrict only to their own data
     if (currentUser && currentUser.role === 'siswa') {
-      list = list.filter((item) => item && isStudentNameMatched(item.nama, currentUser.nama));
+      const myItem = list.find((item) => item && isStudentNameMatched(item.nama, currentUser.nama));
+      if (myItem) {
+        return [myItem];
+      }
+      const studentSetoran = setoran.filter((s) => isStudentNameMatched(s.nama, currentUser.nama));
+      const studentZiyadah = studentSetoran.filter((s) => s.kegiatan?.toLowerCase().includes('ziyadah'));
+      const totalZiyadahBaris = studentZiyadah.reduce((acc, curr) => acc + (Number(curr.baris) || 0), 0);
+      const defaultTarget = 300;
+      const remTarget = Math.max(0, defaultTarget - totalZiyadahBaris);
+      const pct = Math.round((totalZiyadahBaris / defaultTarget) * 100);
+      return [{
+        id: `synthetic_${currentUser.id}`,
+        nama: currentUser.nama,
+        grade: currentUser.grade || '7A',
+        capaian: totalZiyadahBaris,
+        target: remTarget,
+        persentase: pct
+      }];
     }
     
     // If user filtered by grade:
@@ -824,7 +1098,7 @@ export default function App() {
       }
       return 0;
     });
-  }, [mergedCapaianZiyadah, capaianGradeFilter, capaianSearch, capaianSortBy, currentUser]);
+  }, [mergedCapaianZiyadah, capaianGradeFilter, capaianSearch, capaianSortBy, currentUser, setoran]);
 
   const capaianStats = useMemo(() => {
     const list = currentUser && currentUser.role === 'siswa'
@@ -874,7 +1148,13 @@ export default function App() {
           const sortedTasks = res.data.sort((a: TugasHarian, b: TugasHarian) => {
             return parseDateToTime(b.tanggal) - parseDateToTime(a.tanggal);
           });
-          setTugasHarian(sortedTasks);
+          setTugasHarian((prev) => {
+            // Keep local tasks if server hasn't returned them yet
+            const serverIds = new Set(sortedTasks.map((t: TugasHarian) => String(t.id)));
+            const localOnly = prev.filter((t) => !serverIds.has(String(t.id)));
+            const merged = [...localOnly, ...sortedTasks];
+            return merged.sort((a, b) => parseDateToTime(b.tanggal) - parseDateToTime(a.tanggal));
+          });
         }
       }
     } catch (err) {
@@ -1064,6 +1344,44 @@ export default function App() {
     setErrorMessage('');
   };
 
+  const updateCapaianZiyadahFromSetoran = (studentName: string, grade: string, barisAdded: number) => {
+    if (!studentName || barisAdded <= 0) return;
+    setCapaianZiyadah((prev) => {
+      const existingIdx = prev.findIndex((item) => item && isStudentNameMatched(item.nama, studentName));
+      if (existingIdx !== -1) {
+        const updated = [...prev];
+        const cur = updated[existingIdx];
+        const newCapaian = (cur.capaian || 0) + barisAdded;
+        const newTarget = Math.max(0, (cur.target || 0) - barisAdded);
+        const totalOrig = (cur.capaian || 0) + (cur.target || 0);
+        const newPct = totalOrig > 0 ? Math.round((newCapaian / totalOrig) * 100) : 100;
+        updated[existingIdx] = {
+          ...cur,
+          capaian: newCapaian,
+          target: newTarget,
+          persentase: newPct
+        };
+        return updated;
+      } else {
+        const initialTarget = 300;
+        const newCapaian = barisAdded;
+        const newTarget = Math.max(0, initialTarget - barisAdded);
+        const newPct = Math.round((newCapaian / initialTarget) * 100);
+        return [
+          ...prev,
+          {
+            id: `capaian_${Date.now()}_${Math.random()}`,
+            nama: studentName,
+            grade: grade || '7A',
+            capaian: newCapaian,
+            target: newTarget,
+            persentase: newPct
+          }
+        ];
+      }
+    });
+  };
+
   // Add new assessment
   const handleAddSetoran = async (newSetoran: Omit<Setoran, 'id'> & { id?: string }): Promise<boolean> => {
     setIsSubmitting(true);
@@ -1074,6 +1392,11 @@ export default function App() {
       ...newSetoran,
       id: finalId,
     };
+
+    // Requirement 4: Auto update capaian target ziyadah if setoran is Ziyadah
+    if (recordWithId.kegiatan && recordWithId.kegiatan.toLowerCase().includes('ziyadah')) {
+      updateCapaianZiyadahFromSetoran(recordWithId.nama, recordWithId.grade, Number(recordWithId.baris) || 1);
+    }
 
     if (usingDemoData || !settings.appsScriptUrl) {
       // Offline Demo Mode: Append locally in memory
@@ -1476,8 +1799,11 @@ export default function App() {
       id: finalId,
     };
 
+    // Optimistically update local state so task shows on dashboard immediately!
+    setTugasHarian((prev) => [recordWithId, ...prev.filter((t) => String(t.id) !== String(recordWithId.id))]);
+    setGradeFilter('All');
+
     if (usingDemoData || !settings.appsScriptUrl) {
-      setTugasHarian((prev) => [recordWithId, ...prev]);
       setIsSubmittingTugas(false);
       setLastCreatedRecord({
         studentName: recordWithId.siswa || 'Semua Siswa',
@@ -1522,7 +1848,7 @@ export default function App() {
     } catch (err) {
       console.error('Error submitting tugas harian:', err);
       setIsSubmittingTugas(false);
-      return false;
+      return true; // Return true as task is saved locally
     }
   };
 
@@ -1619,27 +1945,6 @@ export default function App() {
       return false;
     }
   };
-
-  // List of active students with ID & Grade for dropdown auto-population
-  const activeStudentsList = useMemo(() => {
-    const map: { [key: string]: { id: string; nama: string; grade: string } } = {};
-    setoran.forEach((s) => {
-      if (s.nama && !map[(s.nama || '').toLowerCase()]) {
-        map[(s.nama || '').toLowerCase()] = {
-          id: s.id || '',
-          nama: s.nama,
-          grade: s.grade || '',
-        };
-      }
-    });
-    return Object.values(map).sort((a, b) => {
-      const gradeA = a.grade || '';
-      const gradeB = b.grade || '';
-      const gradeCompare = gradeA.localeCompare(gradeB);
-      if (gradeCompare !== 0) return gradeCompare;
-      return (a.nama || '').localeCompare(b.nama || '');
-    });
-  }, [setoran]);
 
   // Helper to check if current logged-in ustadz/admin can edit/manage a student's data
   const canCurrentUserEditStudent = (studentId: string | undefined, studentNama: string | undefined): boolean => {
@@ -1795,15 +2100,15 @@ export default function App() {
           const halaqahGrades = activeStudentsList
             .filter((st) => halaqahStudentIds.includes(st.id))
             .map((st) => st.grade);
-          matchesGrade = t.grade === 'All' || halaqahGrades.includes(t.grade);
+          matchesGrade = t.grade === 'All' || halaqahGrades.some((hg) => isGradeMatched(t.grade, hg));
         }
       } else {
-        matchesGrade = gradeFilter === 'All' || t.grade === 'All' || t.grade === gradeFilter;
+        matchesGrade = gradeFilter === 'All' || t.grade === 'All' || isGradeMatched(t.grade, gradeFilter);
       }
       
       // For student view, if grade filter is 'All', they should see tasks for 'All' or their own grade
       if (isStudent && gradeFilter === 'All' && studentGrade) {
-        matchesGrade = t.grade === 'All' || t.grade === studentGrade;
+        matchesGrade = t.grade === 'All' || isGradeMatched(t.grade, studentGrade);
       }
 
       // If the task is specific to a single student
@@ -1859,13 +2164,13 @@ export default function App() {
         }
       }
       
-      const matchesGrade = t.grade === 'All' || (studentGrade && t.grade === studentGrade);
+      const matchesGrade = t.grade === 'All' || (studentGrade && isGradeMatched(t.grade, studentGrade));
       return matchesGrade;
     });
     if (studentTasks.length === 0) return null;
     return [...studentTasks].sort((a, b) => {
-      const dateA = new Date(a.tanggal).getTime();
-      const dateB = new Date(b.tanggal).getTime();
+      const dateA = parseDateToTime(a.tanggal);
+      const dateB = parseDateToTime(b.tanggal);
       if (dateB !== dateA) return dateB - dateA;
       return tugasHarian.indexOf(b) - tugasHarian.indexOf(a);
     })[0];
@@ -2201,6 +2506,39 @@ export default function App() {
               </div>
             </div>
 
+            {/* Ranking Widget Icon - Posisi tepat di bawah icon profile */}
+            <div className="relative group/ranking flex justify-center">
+              <button 
+                id="btn-ranking-modal"
+                onClick={() => setShowRankingModal(true)}
+                className={`rounded-2xl cursor-pointer transition-all hover:scale-105 active:scale-95 flex items-center justify-center border shadow-2xs shrink-0 ${
+                  currentUser.role === 'siswa'
+                    ? 'w-11 h-11 border-amber-400 bg-amber-400 text-slate-900 shadow-amber-200/50'
+                    : 'w-11 h-11 border-amber-300 bg-amber-50 text-amber-600'
+                }`}
+              >
+                {currentUser.role === 'siswa' ? (
+                  <div className="flex flex-col items-center justify-center leading-none">
+                    <Trophy className="w-3.5 h-3.5 text-slate-900 mb-0.5" />
+                    <span className="text-[11px] font-black text-slate-900 font-mono tracking-tighter">
+                      #{studentRankInfo?.rank || 1}
+                    </span>
+                  </div>
+                ) : (
+                  <Trophy className="w-5 h-5 text-amber-500" />
+                )}
+              </button>
+              {/* Tooltip */}
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/ranking:opacity-100 group-hover/ranking:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50 flex flex-col gap-0.5">
+                <span className="font-extrabold">
+                  {currentUser.role === 'siswa' ? `Peringkat Saya: #${studentRankInfo?.rank || 1}` : 'Ranking Santri'}
+                </span>
+                <span className="text-[10px] text-slate-300">
+                  {currentUser.role === 'siswa' ? `Kelas ${currentUser.grade || '7A'}` : 'Berdasarkan Kelas'}
+                </span>
+              </div>
+            </div>
+
             {/* Navigation vertical list */}
             <div className="flex flex-col gap-2.5 items-center w-full">
               <span className="text-[9px] font-black tracking-wider text-slate-400 uppercase text-center block mb-1">Menu</span>
@@ -2286,6 +2624,30 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Tab: Berita */}
+              <div className="relative group/menu w-full flex justify-center">
+                <button
+                  id="tab-berita-btn"
+                  onClick={() => { setActiveTab('berita'); setShowConfig(false); }}
+                  className={`relative flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
+                    activeTab === 'berita'
+                      ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
+                  }`}
+                >
+                  <Newspaper className="w-5 h-5 text-[#0000FE]" />
+                  {beritaList.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded-full scale-90 border border-white">
+                      {beritaList.length}
+                    </span>
+                  )}
+                </button>
+                {/* Tooltip Description */}
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                  Berita & Pengumuman
+                </div>
+              </div>
+
               {/* Tab: Database (only for ustadz/admin) */}
               {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
                 <div className="relative group/menu w-full flex justify-center">
@@ -2368,24 +2730,10 @@ export default function App() {
         {/* Main scrollable content view */}
         <main className="flex-1 overflow-y-auto bg-slate-50 p-6 md:p-8 space-y-6">
           
-          {/* Welcome Banner Hero */}
-          <div className="w-full bg-white text-slate-800 p-7 md:p-8 rounded-3xl border border-slate-200 shadow-xl shadow-blue-900/5 relative overflow-hidden flex flex-col justify-center space-y-2">
-            <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#0000FE_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
-            <span className="bg-blue-50 text-[#0000FE] text-[10px] font-extrabold tracking-widest px-3 py-1 rounded-full uppercase border border-blue-100 flex items-center gap-1.5 w-fit">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Portal Tahfizh Al-Wildan
-            </span>
-            <h2 className="text-xl md:text-2xl font-black tracking-wide text-[#0000FE]">
-              Ahlan wa Sahlan Abu/Ummu...
-            </h2>
-            <p className="text-slate-500 text-xs md:text-sm max-w-4xl leading-relaxed">
-              Pantau rekapitulasi evaluasi setoran hafalan (Tahsin, Ziyadah & Murojaah) ananda secara berkala dan terstruktur. Semua data tersinkronisasi langsung secara real-time dengan Google Sheets milik asatidzah.
-            </p>
-          </div>
-
           {/* Form & Forward Widgets - Pindah ke paling atas persis setelah kolom sambutan */}
           {(currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
             <div className="space-y-6">
-              {activeTab === 'rekap' && (
+              <div className={activeTab === 'rekap' ? 'block' : 'hidden'}>
                 <NewAssessmentForm
                   onAddSetoran={handleAddSetoran}
                   activeStudents={allowedStudentsForForm}
@@ -2394,9 +2742,9 @@ export default function App() {
                   onUpdateSetoran={handleUpdateSetoran}
                   onCancelEdit={() => setEditingSetoran(null)}
                 />
-              )}
+              </div>
 
-              {activeTab === 'tugas' && (
+              <div className={activeTab === 'tugas' ? 'block' : 'hidden'}>
                 <div id="tugas-form-container" className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -2614,7 +2962,7 @@ export default function App() {
                     </button>
                   </form>
                 </div>
-              )}
+              </div>
 
               {/* Forward Message Widget */}
               {(activeTab === 'rekap' || activeTab === 'tugas') && (
@@ -2873,7 +3221,7 @@ export default function App() {
 
           {/* Active Tab Content Panel */}
           <div className="space-y-6">
-            {activeTab === 'rekap' && (
+            <div className={activeTab === 'rekap' ? 'block space-y-6' : 'hidden'}>
           <>
             {/* "Lihat Informasi Terbaru" Quick Button/Banner for Student Account */}
             {currentUser?.role === 'siswa' && (
@@ -3256,9 +3604,9 @@ export default function App() {
 
         </div>
         </>
-        )}
+        </div>
 
-        {activeTab === 'statistik' && (
+        <div className={activeTab === 'statistik' ? 'block' : 'hidden'}>
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom duration-300">
             {/* Header info bar */}
             <div className="bg-[#0000FE] text-white rounded-3xl p-6 shadow-sm border border-blue-700 relative overflow-hidden">
@@ -3521,9 +3869,9 @@ export default function App() {
             {/* Live Visual Analytics section */}
             <StatsCharts data={filteredSetoran} />
           </div>
-        )}
+        </div>
 
-        {activeTab === 'tugas' && (
+        <div className={activeTab === 'tugas' ? 'block' : 'hidden'}>
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom duration-300">
             {/* Header info bar */}
             <div className="bg-[#0000FE] text-white rounded-3xl p-6 shadow-sm border border-blue-700 relative overflow-hidden">
@@ -3779,9 +4127,9 @@ export default function App() {
 
             </div>
           </div>
-        )}
+        </div>
 
-        {activeTab === 'capaian_ziyadah' && (
+        <div className={activeTab === 'capaian_ziyadah' ? 'block' : 'hidden'}>
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom duration-300">
             
             {/* Header info bar */}
@@ -3806,109 +4154,171 @@ export default function App() {
             </div>
 
             {/* Key Stats Cards Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Siswa</span>
-                  <div className="p-2 bg-slate-50 text-slate-500 rounded-xl">
-                    <Users className="w-3.5 h-3.5" />
+            {currentUser?.role === 'siswa' ? (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Total</span>
+                    <div className="p-2 bg-slate-50 text-slate-500 rounded-xl">
+                      <Target className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-slate-800">
+                      {processedCapaianList[0]?.target ? (processedCapaianList[0].target + processedCapaianList[0].capaian) : 300} Baris
+                    </h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Target hafalan setahun</p>
                   </div>
                 </div>
-                <div className="mt-2">
-                  <h4 className="text-xl font-black text-slate-800">{capaianStats.total}</h4>
-                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Siswa terdaftar target</p>
-                </div>
-              </div>
 
-              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Rata-rata Capaian</span>
-                  <div className="p-2 bg-blue-50 text-[#0000FE] rounded-xl">
-                    <TrendingUp className="w-3.5 h-3.5" />
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Capaian Ziyadah</span>
+                    <div className="p-2 bg-blue-50 text-[#0000FE] rounded-xl">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-[#0000FE]">{processedCapaianList[0]?.capaian || 0} Baris</h4>
+                    <p className="text-[9px] text-blue-600 font-semibold mt-0.5">Total baris ziyadah</p>
                   </div>
                 </div>
-                <div className="mt-2">
-                  <h4 className="text-xl font-black text-[#0000FE]">{capaianStats.avgPercentage}%</h4>
-                  <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
-                    <div className="bg-[#0000FE] h-full" style={{ width: `${Math.min(capaianStats.avgPercentage, 100)}%` }}></div>
+
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider font-extrabold">Persentase</span>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                      <Award className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-emerald-700">{processedCapaianList[0]?.persentase || 0}%</h4>
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                      <div className="bg-emerald-500 h-full" style={{ width: `${Math.min(processedCapaianList[0]?.persentase || 0, 100)}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider font-extrabold">Sisa Target</span>
+                    <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-amber-700">{processedCapaianList[0]?.target || 0} Baris</h4>
+                    <p className="text-[9px] text-amber-600 font-semibold mt-0.5">Sisa baris ke target</p>
                   </div>
                 </div>
               </div>
-
-              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider font-extrabold">Mencapai Target</span>
-                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Siswa</span>
+                    <div className="p-2 bg-slate-50 text-slate-500 rounded-xl">
+                      <Users className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-slate-800">{capaianStats.total}</h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Siswa terdaftar target</p>
                   </div>
                 </div>
-                <div className="mt-2">
-                  <h4 className="text-xl font-black text-emerald-700">{capaianStats.reachedTarget}</h4>
-                  <p className="text-[9px] text-emerald-600 font-bold mt-0.5 font-sans">Lulus Target 100% 🎉</p>
-                </div>
-              </div>
 
-              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider font-extrabold">Capaian Tertinggi</span>
-                  <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-                    <Trophy className="w-3.5 h-3.5" />
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Rata-rata Capaian</span>
+                    <div className="p-2 bg-blue-50 text-[#0000FE] rounded-xl">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-[#0000FE]">{capaianStats.avgPercentage}%</h4>
+                    <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
+                      <div className="bg-[#0000FE] h-full" style={{ width: `${Math.min(capaianStats.avgPercentage, 100)}%` }}></div>
+                    </div>
                   </div>
                 </div>
-                <div className="mt-2">
-                  <h4 className="text-xl font-black text-amber-700">{capaianStats.highestPct}%</h4>
-                  <p className="text-[9px] text-amber-600 font-semibold mt-0.5">Skor persentase tertinggi</p>
-                </div>
-              </div>
-            </div>
 
-            {/* Filter controls panel */}
-            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
-              
-              {/* Search */}
-              <div className="relative w-full md:w-72">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  id="input-capaian-search"
-                  type="text"
-                  placeholder="Cari nama siswa..."
-                  value={capaianSearch}
-                  onChange={(e) => setCapaianSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0000FE] focus:ring-1 focus:ring-[#0000FE]"
-                />
-              </div>
-
-              {/* Dropdowns */}
-              <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-                <div className="flex items-center gap-1 w-full sm:w-auto">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Kelas:</span>
-                  <select
-                    id="select-capaian-grade-filter"
-                    value={capaianGradeFilter}
-                    onChange={(e) => setCapaianGradeFilter(e.target.value)}
-                    className="w-full sm:w-auto px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0000FE]"
-                  >
-                    {uniqueCapaianGrades.map((grade, idx) => (
-                      <option key={`capaian-grade-${grade}-${idx}`} value={grade}>{grade === 'All' ? 'Semua Kelas' : grade}</option>
-                    ))}
-                  </select>
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider font-extrabold">Mencapai Target</span>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-emerald-700">{capaianStats.reachedTarget}</h4>
+                    <p className="text-[9px] text-emerald-600 font-bold mt-0.5 font-sans">Lulus Target 100% 🎉</p>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1 w-full sm:w-auto">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Urutan:</span>
-                  <select
-                    id="select-capaian-sort-filter"
-                    value={capaianSortBy}
-                    onChange={(e) => setCapaianSortBy(e.target.value as any)}
-                    className="w-full sm:w-auto px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0000FE]"
-                  >
-                    <option value="percentage_desc">Capaian Tertinggi</option>
-                    <option value="percentage_asc">Capaian Terendah</option>
-                    <option value="name">Nama Siswa (A-Z)</option>
-                  </select>
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider font-extrabold">Capaian Tertinggi</span>
+                    <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                      <Trophy className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-amber-700">{capaianStats.highestPct}%</h4>
+                    <p className="text-[9px] text-amber-600 font-semibold mt-0.5">Skor persentase tertinggi</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Filter controls panel - ONLY shown for Ustadz/Admin */}
+            {currentUser && currentUser.role !== 'siswa' && (
+              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
+                
+                {/* Search */}
+                <div className="relative w-full md:w-72">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <input
+                    id="input-capaian-search"
+                    type="text"
+                    placeholder="Cari nama siswa..."
+                    value={capaianSearch}
+                    onChange={(e) => setCapaianSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0000FE] focus:ring-1 focus:ring-[#0000FE]"
+                  />
+                </div>
+
+                {/* Dropdowns */}
+                <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                  <div className="flex items-center gap-1 w-full sm:w-auto">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Kelas:</span>
+                    <select
+                      id="select-capaian-grade-filter"
+                      value={capaianGradeFilter}
+                      onChange={(e) => setCapaianGradeFilter(e.target.value)}
+                      className="w-full sm:w-auto px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0000FE]"
+                    >
+                      {uniqueCapaianGrades.map((grade, idx) => (
+                        <option key={`capaian-grade-${grade}-${idx}`} value={grade}>{grade === 'All' ? 'Semua Kelas' : grade}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1 w-full sm:w-auto">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Urutan:</span>
+                    <select
+                      id="select-capaian-sort-filter"
+                      value={capaianSortBy}
+                      onChange={(e) => setCapaianSortBy(e.target.value as any)}
+                      className="w-full sm:w-auto px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0000FE]"
+                    >
+                      <option value="percentage_desc">Capaian Tertinggi</option>
+                      <option value="percentage_asc">Capaian Terendah</option>
+                      <option value="name">Nama Siswa (A-Z)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Students list cards/grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -4109,25 +4519,38 @@ export default function App() {
               )}
             </div>
           </div>
+        </div>
+
+        {(currentUser?.role === 'ustadz' || currentUser?.role === 'admin') && (
+          <div className={activeTab === 'database' ? 'block' : 'hidden'}>
+            <DatabaseTab
+              setoran={setoran}
+              gmailAccounts={gmailAccounts}
+              onSendReminder={(studentName, email) => {
+                setLastCreatedRecord({
+                  studentName,
+                  type: 'setoran',
+                  timestamp: Date.now()
+                });
+                setManualForwardEmail(email);
+                setManualForwardStudentName('');
+                // scroll up to form/widget container if needed
+                document.getElementById('tugas-form-container')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
+          </div>
         )}
 
-        {activeTab === 'database' && (currentUser?.role === 'ustadz' || currentUser?.role === 'admin') && (
-          <DatabaseTab
-            setoran={setoran}
-            gmailAccounts={gmailAccounts}
-            onSendReminder={(studentName, email) => {
-              setLastCreatedRecord({
-                studentName,
-                type: 'setoran',
-                timestamp: Date.now()
-              });
-              setManualForwardEmail(email);
-              setManualForwardStudentName('');
-              // scroll up to form/widget container if needed
-              document.getElementById('tugas-form-container')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+        <div className={activeTab === 'berita' ? 'block' : 'hidden'}>
+          <BeritaTab
+            currentUser={currentUser}
+            beritaList={beritaList}
+            onAddBerita={handleAddBerita}
+            onDeleteBerita={handleDeleteBerita}
+            onToggleLike={handleToggleLikeBerita}
+            onAddComment={handleAddCommentBerita}
           />
-        )}
+        </div>
 
           </div>
 
@@ -4470,6 +4893,17 @@ export default function App() {
           setoran={setoran}
           activeStudents={activeStudentsList}
           onUpdateHalaqahStudents={(ids) => setHalaqahStudentIds(ids)}
+        />
+      )}
+
+      {/* Ranking Santri per Kelas Modal */}
+      {showRankingModal && (
+        <RankingModal
+          currentUser={currentUser}
+          setoran={setoran}
+          capaianZiyadah={capaianZiyadah}
+          activeStudents={activeStudentsList}
+          onClose={() => setShowRankingModal(false)}
         />
       )}
 

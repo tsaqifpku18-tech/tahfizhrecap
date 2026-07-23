@@ -163,6 +163,15 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
             Selamat datang di sistem rekapitulasi hafalan Quran terintegrasi. Membantu orang tua siswa memantau progres hafalan putra-putri secara akurat, dinamis, dan berkala.
           </p>
 
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 text-white space-y-1">
+            <h2 className="text-lg font-black tracking-wide text-amber-300">
+              Ahlan wa Sahlan Abu/Ummu...
+            </h2>
+            <p className="text-xs text-blue-100 leading-relaxed">
+              Pantau rekapitulasi evaluasi setoran hafalan (Tahsin, Ziyadah & Murojaah) ananda secara berkala dan terstruktur. Semua data tersinkronisasi langsung secara real-time dengan Google Sheets milik asatidzah.
+            </p>
+          </div>
+
           <div className="pt-4 flex items-center gap-6 border-t border-white/20 text-xs text-blue-200">
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-white" />
@@ -208,9 +217,20 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
 
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
           <div className="bg-white border border-slate-200/80 py-8 px-6 shadow-xl shadow-blue-900/5 rounded-[32px] space-y-6 sm:px-10">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-lg font-black text-slate-950 tracking-wide">Masuk ke Sistem</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Silakan masukkan kredensial yang terdaftar di lembar Akun</p>
+            <div className="border-b border-slate-100 pb-4 space-y-3">
+              <div>
+                <h3 className="text-lg font-black text-slate-950 tracking-wide">Masuk ke Sistem</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Silakan masukkan kredensial yang terdaftar di lembar Akun</p>
+              </div>
+
+              <div className="bg-blue-50/80 border border-blue-100 p-3.5 rounded-2xl text-left space-y-1">
+                <h4 className="text-xs font-black text-[#0000FE]">
+                  Ahlan wa Sahlan Abu/Ummu...
+                </h4>
+                <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                  Pantau rekapitulasi evaluasi setoran hafalan (Tahsin, Ziyadah & Murojaah) ananda secara berkala dan terstruktur. Semua data tersinkronisasi langsung secara real-time dengan Google Sheets milik asatidzah.
+                </p>
+              </div>
             </div>
 
             {errorMsg && (

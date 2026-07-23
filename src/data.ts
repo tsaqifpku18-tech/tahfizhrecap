@@ -322,7 +322,15 @@ function doGet(e) {
         
         for (var i = 1; i < dataTugas.length; i++) {
           var row = dataTugas[i];
-          if (row.length === 0 || !row[0]) continue;
+          if (row.length === 0) continue;
+          var rowHasData = false;
+          for (var c = 0; c < row.length; c++) {
+            if (row[c] !== "" && row[c] !== null && row[c] !== undefined) {
+              rowHasData = true;
+              break;
+            }
+          }
+          if (!rowHasData) continue;
           
           var zVal = tugasZiyadahIdx !== -1 ? String(row[tugasZiyadahIdx] !== undefined ? row[tugasZiyadahIdx] : "").trim() : "";
           var mVal = tugasMurojaahIdx !== -1 ? String(row[tugasMurojaahIdx] !== undefined ? row[tugasMurojaahIdx] : "").trim() : "";
@@ -1374,6 +1382,26 @@ function createJsonResponse(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 `;
+
+export const DEMO_BERITA: any[] = [
+  {
+    id: 'berita-1',
+    title: 'Pengumuman Munaqasyah & Tasmi Juz 30 Perdana',
+    caption: 'Assalamu\'alaikum Wr. Wb. Diberitahukan kepada seluruh santri dan wali murid Al-Wildan Islamic School, pelaksanaan Munaqasyah Hafalan Al-Qur\'an Juz 30 akan diselenggarakan pada akhir bulan ini. Diharapkan seluruh santri memperlancar murojaah harian.',
+    authorName: 'Ust. Tsaqif',
+    createdAt: '2026-07-20 08:30',
+    likes: ['Siswa 1', 'Ahmad Fadhil'],
+    comments: [
+      {
+        id: 'c1',
+        userName: 'Ahmad Fadhil',
+        userRole: 'siswa',
+        comment: 'Bismillah, siap berjuang untuk tasmi!',
+        createdAt: '2026-07-20 09:15'
+      }
+    ]
+  }
+];
 
 export const APPS_SCRIPT_INSTRUCTIONS = `### Cara Menghubungkan Google Sheet Anda & Sistem Akun:
 

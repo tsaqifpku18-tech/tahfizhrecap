@@ -62,4 +62,24 @@ export interface CapaianTargetZiyadah {
   persentase?: number | null;
 }
 
+export interface BeritaComment {
+  id: string;
+  userName: string;
+  userRole: 'admin' | 'ustadz' | 'siswa' | string;
+  comment: string;
+  createdAt: string;
+}
+
+export interface BeritaItem {
+  id: string;
+  title?: string;
+  caption: string;
+  imageUrl?: string;
+  imageFileName?: string;
+  authorName: string;
+  createdAt: string;
+  likes: string[];
+  comments: BeritaComment[];
+}
+
 
