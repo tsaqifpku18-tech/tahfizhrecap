@@ -212,14 +212,14 @@ export const DEMO_TUGAS_HARIAN: TugasHarian[] = [
 ];
 
 export const DEMO_CAPAIAN_TARGET_ZIYADAH: CapaianTargetZiyadah[] = [
-  { id: "c1", nama: "Kean", grade: "2 Inter 1", capaian: 240, target: 400 },
-  { id: "c2", nama: "Azzam", grade: "2 Inter 2", capaian: 180, target: 400 },
-  { id: "c3", nama: "Ahmad", grade: "2 Inter 1", capaian: 350, target: 400 },
-  { id: "c4", nama: "Fathir", grade: "2 Inter 2", capaian: 120, target: 400 },
-  { id: "c5", nama: "Zaid", grade: "2 Inter 1", capaian: 290, target: 400 },
-  { id: "c6", nama: "Rania", grade: "2 Inter 2", capaian: 310, target: 400 },
-  { id: "c7", nama: "Salma", grade: "2 Inter 2", capaian: 380, target: 400 },
-  { id: "c8", nama: "Yusuf", grade: "2 Inter 1", capaian: 220, target: 400 },
+  { id: "c1", nama: "Kean", grade: "2 Inter 1", capaian: 240, target: 400, dari: "An-Naba' 1", sampai: "An-Nazi'at 20" },
+  { id: "c2", nama: "Azzam", grade: "2 Inter 2", capaian: 180, target: 400, dari: "An-Naba' 1", sampai: "An-Naba' 30" },
+  { id: "c3", nama: "Ahmad", grade: "2 Inter 1", capaian: 350, target: 400, dari: "An-Naba' 1", sampai: "Abasa 25" },
+  { id: "c4", nama: "Fathir", grade: "2 Inter 2", capaian: 120, target: 400, dari: "An-Naba' 1", sampai: "An-Naba' 20" },
+  { id: "c5", nama: "Zaid", grade: "2 Inter 1", capaian: 290, target: 400, dari: "An-Naba' 1", sampai: "At-Takwir 10" },
+  { id: "c6", nama: "Rania", grade: "2 Inter 2", capaian: 310, target: 400, dari: "An-Naba' 1", sampai: "Al-Infitar 15" },
+  { id: "c7", nama: "Salma", grade: "2 Inter 2", capaian: 380, target: 400, dari: "An-Naba' 1", sampai: "Al-Mutaffifin 30" },
+  { id: "c8", nama: "Yusuf", grade: "2 Inter 1", capaian: 220, target: 400, dari: "An-Naba' 1", sampai: "An-Nazi'at 10" },
 ];
 
 export const GOOGLE_APPS_SCRIPT_CODE = `/**
@@ -460,6 +460,8 @@ function doGet(e) {
     var cCapaianIdx = -1;
     var cTargetIdx = -1;
     var cPersenIdx = -1;
+    var cDariIdx = -1;
+    var cSampaiIdx = -1;
     
     // First, look for exact matches to avoid partial matching conflicts (e.g. "Capaian" matching "Persentase Kecapaian")
     for (var h = 0; h < headersCapaian.length; h++) {
@@ -474,6 +476,10 @@ function doGet(e) {
         cTargetIdx = h;
       } else if (headerStr === "persentase" || headerStr === "persen" || headerStr === "percentage") {
         cPersenIdx = h;
+      } else if (headerStr === "dari" || headerStr.indexOf("dari") !== -1) {
+        cDariIdx = h;
+      } else if (headerStr === "sampai" || headerStr.indexOf("sampai") !== -1) {
+        cSampaiIdx = h;
       }
     }
     
@@ -540,7 +546,9 @@ function doGet(e) {
         grade: cGradeIdx !== -1 ? String(row[cGradeIdx] !== undefined ? row[cGradeIdx] : "").trim() : "",
         capaian: cCapaianIdx !== -1 ? Number(row[cCapaianIdx] || 0) : 0,
         target: cTargetIdx !== -1 ? Number(row[cTargetIdx] || 0) : 0,
-        persentase: persenVal
+        persentase: persenVal,
+        dari: cDariIdx !== -1 && row[cDariIdx] !== undefined ? String(row[cDariIdx]).trim() : "",
+        sampai: cSampaiIdx !== -1 && row[cSampaiIdx] !== undefined ? String(row[cSampaiIdx]).trim() : ""
       });
     }
     return createJsonResponse({ status: "success", data: capaianList });
@@ -571,6 +579,8 @@ function doGet(e) {
   var pTugasZiyadahIdx = -1;
   var pTugasMurojaahIdx = -1;
   var pTugasMateriIdx = -1;
+  var pDariIdx = -1;
+  var pSampaiIdx = -1;
   
   for (var h = 0; h < headers.length; h++) {
     var headerStr = String(headers[h]).toLowerCase().trim();
@@ -584,6 +594,8 @@ function doGet(e) {
     else if (headerStr === "ctt" || headerStr === "catatan" || headerStr === "nilai" || headerStr === "catatan penilaian") cttIdx = h;
     else if (headerStr === "satuan") satuanIdx = h;
     else if (headerStr === "status") statusIdx = h;
+    else if (headerStr === "dari" || headerStr.indexOf("dari") !== -1) pDariIdx = h;
+    else if (headerStr === "sampai" || headerStr.indexOf("sampai") !== -1) pSampaiIdx = h;
     else if (headerStr.indexOf("tugas ziyadah") !== -1 || headerStr === "ziyadah") pTugasZiyadahIdx = h;
     else if (headerStr.indexOf("tugas murojaah") !== -1 || headerStr === "murojaah") pTugasMurojaahIdx = h;
     else if (headerStr === "tugas materi" || headerStr === "tugas_materi") pTugasMateriIdx = h;
@@ -630,6 +642,8 @@ function doGet(e) {
       ctt: String(row[cttIdx] !== undefined ? row[cttIdx] : "").trim(),
       status: String(row[statusIdx] !== undefined ? row[statusIdx] : "").trim(),
       surah: String(row[surahIdx] !== undefined ? row[surahIdx] : "").trim(),
+      dari: (pDariIdx !== -1 && row[pDariIdx] !== undefined) ? String(row[pDariIdx]).trim() : "",
+      sampai: (pSampaiIdx !== -1 && row[pSampaiIdx] !== undefined) ? String(row[pSampaiIdx]).trim() : "",
       satuan: satuanVal,
       tugasZiyadah: (pTugasZiyadahIdx !== -1 && row[pTugasZiyadahIdx] !== undefined) ? String(row[pTugasZiyadahIdx]).trim() : "",
       tugasMurojaah: (pTugasMurojaahIdx !== -1 && row[pTugasMurojaahIdx] !== undefined) ? String(row[pTugasMurojaahIdx]).trim() : "",

@@ -8,6 +8,8 @@ export interface Setoran {
   ctt: string; // Catatan: "Lancar", "Kurang Lancar", etc.
   status: 'Boleh Lanjut' | 'Ulangi' | string;
   surah?: string; // Nama surah/materi yang disetorkan
+  dari?: string;
+  sampai?: string;
   satuan?: string; // Satuan kegiatan (baris / halaman)
   tugasZiyadah?: string;
   tugasMurojaah?: string;
@@ -60,6 +62,8 @@ export interface CapaianTargetZiyadah {
   capaian: number;
   target: number;
   persentase?: number | null;
+  dari?: string;
+  sampai?: string;
 }
 
 export interface BeritaComment {

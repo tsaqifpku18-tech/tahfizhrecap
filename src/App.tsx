@@ -233,6 +233,34 @@ const normalizeUserSession = (session: UserSession | null): UserSession | null =
   return session;
 };
 
+const isTahsinMenuAllowed = (user: UserSession | null, accounts: UserAccount[]): boolean => {
+  if (!user) return false;
+  if (user.role === 'admin' || user.role === 'ustadz') return true;
+  if (user.role === 'siswa') {
+    let userGrade = user.grade || '';
+    if (!userGrade) {
+      const acc = accounts.find((a) => a && isStudentNameMatched(a.nama, user.nama));
+      if (acc) userGrade = acc.grade || '';
+    }
+    const g = userGrade.trim().toLowerCase();
+    const has3 = /\b3\b/.test(g) || g.startsWith('3') || g.includes('kelas 3');
+    const has4 = /\b4\b/.test(g) || g.startsWith('4') || g.includes('kelas 4');
+    const has7 = /\b7\b/.test(g) || g.startsWith('7') || g.includes('kelas 7');
+    const has11 = /\b11\b/.test(g) || g.startsWith('11') || g.includes('kelas 11');
+
+    if (has3 || has4 || has7 || has11) {
+      return false;
+    }
+
+    const has2 = /\b2\b/.test(g) || g.startsWith('2') || g.includes('kelas 2');
+    if (has2) {
+      return true;
+    }
+    return false;
+  }
+  return false;
+};
+
 export default function App() {
   // 1. Core States
   const [setoran, setSetoran] = useState<Setoran[]>(DEMO_SETORAN);
@@ -742,7 +770,7 @@ export default function App() {
   };
 
   // Default Google Apps Script URL set by the developer
-  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcP6YvgV66Z4x_i7mw8UDNYermPPhd3W1INWCUISoK9z3FR9lJb8Ixu4lnWezMHz7B/exec';
+  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxybCvgEGdRjclTSO-mb_4r7joDC9EIWuQPHwuBz8Pe4JEfjpvSj5WA_usYNMy2zbcq/exec';
 
   // Settings state (Loaded from localStorage with fallback to default Apps Script URL)
   const [settings, setSettings] = useState<Settings>(() => {
@@ -784,6 +812,12 @@ export default function App() {
     }
     return DEMO_AKUN;
   });
+
+  useEffect(() => {
+    if (activeTab === 'capaian_tahsin' && !isTahsinMenuAllowed(currentUser, allAccounts)) {
+      setActiveTab('rekap');
+    }
+  }, [activeTab, currentUser, allAccounts]);
 
   const [originalAdminSession, setOriginalAdminSession] = useState<UserSession | null>(() => {
     const saved = localStorage.getItem('tahfizh_admin_original_session');
@@ -932,6 +966,8 @@ export default function App() {
       grade: string;
       sheetCapaian: number;
       target: number;
+      dari?: string;
+      sampai?: string;
     }>();
 
     // First seed from allAccounts (role: 'siswa')
@@ -975,6 +1011,8 @@ export default function App() {
           existing.sheetCapaian = cz.capaian || 0;
           existing.target = cz.target || existing.target || 300;
           if (cz.grade) existing.grade = cz.grade;
+          if (cz.dari) existing.dari = cz.dari;
+          if (cz.sampai) existing.sampai = cz.sampai;
         } else {
           studentMap.set(key, {
             id: cz.id || `cz_${key}`,
@@ -982,6 +1020,8 @@ export default function App() {
             grade: cz.grade || '7A',
             sheetCapaian: cz.capaian || 0,
             target: cz.target || 300,
+            dari: cz.dari || '',
+            sampai: cz.sampai || '',
           });
         }
       }
@@ -1010,6 +1050,18 @@ export default function App() {
         finalTarget = localEdit.target;
       }
 
+      // Retrieve 'dari' and 'sampai' strictly from database
+      let finalDari = stData.dari || '';
+      let finalSampai = stData.sampai || '';
+
+      if (!finalDari || !finalSampai) {
+        for (const s of studentSetorans) {
+          if (!finalDari && s.dari) finalDari = s.dari;
+          if (!finalSampai && s.sampai) finalSampai = s.sampai;
+          if (finalDari && finalSampai) break;
+        }
+      }
+
       const percentage = finalTarget > 0 ? Math.round((finalCapaian / finalTarget) * 100) : 0;
 
       result.push({
@@ -1019,6 +1071,8 @@ export default function App() {
         capaian: finalCapaian,
         target: finalTarget,
         persentase: percentage,
+        dari: finalDari,
+        sampai: finalSampai,
       });
     });
 
@@ -2822,23 +2876,25 @@ export default function App() {
               </div>
 
               {/* Tab: Capaian Target Tahsin (IQRA) */}
-              <div className="relative group/menu w-full flex justify-center">
-                <button
-                  id="tab-capaian-tahsin-btn"
-                  onClick={() => { setActiveTab('capaian_tahsin'); setShowConfig(false); }}
-                  className={`flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
-                    activeTab === 'capaian_tahsin'
-                      ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
-                  }`}
-                >
-                  <BookOpen className="w-5 h-5 text-[#0000FE]" />
-                </button>
-                {/* Tooltip Description */}
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
-                  Capaian Target Tahsin (IQRA)
+              {isTahsinMenuAllowed(currentUser, allAccounts) && (
+                <div className="relative group/menu w-full flex justify-center">
+                  <button
+                    id="tab-capaian-tahsin-btn"
+                    onClick={() => { setActiveTab('capaian_tahsin'); setShowConfig(false); }}
+                    className={`flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
+                      activeTab === 'capaian_tahsin'
+                        ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <BookOpen className="w-5 h-5 text-[#0000FE]" />
+                  </button>
+                  {/* Tooltip Description */}
+                  <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                    Capaian Target Tahsin (IQRA)
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Tab: Berita */}
               <div className="relative group/menu w-full flex justify-center">
@@ -4712,15 +4768,25 @@ export default function App() {
                         <>
                           {/* Visual Progress gauge */}
                           <div className="mt-5 space-y-2">
-                            <div className="flex justify-between items-center text-[11px] font-semibold text-slate-500">
-                              <span className="flex items-center gap-1 font-sans">
-                                <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                                Capaian: <strong className="text-slate-700 font-extrabold">{item.capaian}</strong> baris
-                              </span>
-                              <span className="flex items-center gap-1 font-sans">
-                                <Target className="w-3.5 h-3.5 text-slate-400" />
-                                Target: <strong className="text-slate-700 font-extrabold">{item.target}</strong> baris
-                              </span>
+                            <div className="flex justify-between items-start text-[11px] font-semibold text-slate-500">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1 font-sans">
+                                  Dari: <strong className="text-slate-700 font-extrabold">{item.dari || '-'}</strong>
+                                </span>
+                                <span className="flex items-center gap-1 font-sans mt-1">
+                                  <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                                  Capaian: <strong className="text-slate-700 font-extrabold">{item.capaian}</strong> baris
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-end">
+                                <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1 font-sans">
+                                  Sampai: <strong className="text-slate-700 font-extrabold">{item.sampai || '-'}</strong>
+                                </span>
+                                <span className="flex items-center gap-1 font-sans mt-1">
+                                  <Target className="w-3.5 h-3.5 text-slate-400" />
+                                  Target: <strong className="text-slate-700 font-extrabold">{item.target}</strong> baris
+                                </span>
+                              </div>
                             </div>
 
                             {/* Progress Bar background and fill */}
