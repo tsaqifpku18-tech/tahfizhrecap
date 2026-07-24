@@ -238,7 +238,7 @@ export default function App() {
   const [setoran, setSetoran] = useState<Setoran[]>(DEMO_SETORAN);
   const [tugasHarian, setTugasHarian] = useState<TugasHarian[]>(DEMO_TUGAS_HARIAN);
   const [capaianZiyadah, setCapaianZiyadah] = useState<CapaianTargetZiyadah[]>(DEMO_CAPAIAN_TARGET_ZIYADAH);
-  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik' | 'capaian_ziyadah' | 'database' | 'berita'>('rekap');
+  const [activeTab, setActiveTab] = useState<'rekap' | 'tugas' | 'statistik' | 'capaian_ziyadah' | 'capaian_tahsin' | 'database' | 'berita'>('rekap');
   const [showRankingModal, setShowRankingModal] = useState<boolean>(false);
 
   // Berita State
@@ -349,6 +349,55 @@ export default function App() {
   const [editingCapaianStudent, setEditingCapaianStudent] = useState<string | null>(null);
   const [editCapaianValue, setEditCapaianValue] = useState<number>(0);
   const [editTargetValue, setEditTargetValue] = useState<number>(0);
+  
+  // Capaian Target Tahsin (IQRA) States
+  const [selectedIqraLevel, setSelectedIqraLevel] = useState<number>(1);
+  const [capaianTahsinLocalEdits, setCapaianTahsinLocalEdits] = useState<Record<string, { capaian: number; target: number }>>(() => {
+    const saved = localStorage.getItem('capaian_tahsin_local_edits');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error('Failed to parse capaian_tahsin_local_edits', e); }
+    }
+    return {};
+  });
+  const [deletedZiyadahStudents, setDeletedZiyadahStudents] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('deleted_ziyadah_students');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {};
+  });
+  const [deletedTahsinStudents, setDeletedTahsinStudents] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('deleted_tahsin_students');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {};
+  });
+  const [capaianTahsinSearch, setCapaianTahsinSearch] = useState<string>('');
+  const [capaianTahsinGradeFilter, setCapaianTahsinGradeFilter] = useState<string>('All');
+  const [capaianTahsinSortBy, setCapaianTahsinSortBy] = useState<'percentage_desc' | 'percentage_asc' | 'name'>('percentage_desc');
+  const [editingTahsinStudent, setEditingTahsinStudent] = useState<string | null>(null);
+  const [editTahsinCapaianValue, setEditTahsinCapaianValue] = useState<number>(0);
+  const [editTahsinTargetValue, setEditTahsinTargetValue] = useState<number>(32);
+  const [confirmDeleteCapaian, setConfirmDeleteCapaian] = useState<{ nama: string; type: 'ziyadah' | 'tahsin'; iqraLevel?: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('capaian_tahsin_local_edits', JSON.stringify(capaianTahsinLocalEdits));
+    } catch (e) {}
+  }, [capaianTahsinLocalEdits]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('deleted_ziyadah_students', JSON.stringify(deletedZiyadahStudents));
+    } catch (e) {}
+  }, [deletedZiyadahStudents]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('deleted_tahsin_students', JSON.stringify(deletedTahsinStudents));
+    } catch (e) {}
+  }, [deletedTahsinStudents]);
   
   // Tugas Harian Form state
   const [tugasFormTanggal, setTugasFormTanggal] = useState<string>(() => {
@@ -942,6 +991,8 @@ export default function App() {
     const result: CapaianTargetZiyadah[] = [];
 
     studentMap.forEach((stData, key) => {
+      if (deletedZiyadahStudents[key]) return; // Filter out deleted student
+
       // Find all setoran entries from database for this student with kegiatan 'ziyadah'
       const studentSetorans = setoran.filter(
         (s) => s && isStudentNameMatched(s.nama, stData.nama) && s.kegiatan && s.kegiatan.toLowerCase().includes('ziyadah')
@@ -972,7 +1023,153 @@ export default function App() {
     });
 
     return result;
-  }, [allAccounts, activeStudentsList, capaianZiyadah, setoran, capaianLocalEdits]);
+  }, [allAccounts, activeStudentsList, capaianZiyadah, setoran, capaianLocalEdits, deletedZiyadahStudents]);
+
+  // Combined dataset for Capaian Target Tahsin (IQRA 1 - 6)
+  const mergedCapaianTahsin = useMemo(() => {
+    const studentMap = new Map<string, { id: string; nama: string; grade: string }>();
+
+    allAccounts.forEach((acc) => {
+      if (acc && acc.nama && acc.role === 'siswa') {
+        const key = acc.nama.toLowerCase().trim();
+        if (!studentMap.has(key)) {
+          studentMap.set(key, { id: acc.id || `acc_${key}`, nama: acc.nama, grade: acc.grade || '7A' });
+        }
+      }
+    });
+
+    activeStudentsList.forEach((st) => {
+      if (st && st.nama) {
+        const key = st.nama.toLowerCase().trim();
+        if (!studentMap.has(key)) {
+          studentMap.set(key, { id: st.id || `st_${key}`, nama: st.nama, grade: st.grade || '7A' });
+        }
+      }
+    });
+
+    capaianZiyadah.forEach((cz) => {
+      if (cz && cz.nama) {
+        const key = cz.nama.toLowerCase().trim();
+        if (!studentMap.has(key)) {
+          studentMap.set(key, { id: cz.id || `cz_${key}`, nama: cz.nama, grade: cz.grade || '7A' });
+        }
+      }
+    });
+
+    const result: {
+      id: string;
+      nama: string;
+      grade: string;
+      iqraLevel: number;
+      capaian: number;
+      target: number;
+      persentase: number;
+    }[] = [];
+
+    studentMap.forEach((stData, key) => {
+      const deleteKey = `${key}_iqra_${selectedIqraLevel}`;
+      if (deletedTahsinStudents[deleteKey] || deletedTahsinStudents[key]) return;
+
+      // Filter setoran for Tahsin/IQRA level
+      const studentSetorans = setoran.filter((s) => {
+        if (!s || !isStudentNameMatched(s.nama, stData.nama)) return false;
+        const keg = (s.kegiatan || '').toLowerCase();
+        const sur = (s.surah || '').toLowerCase();
+        const isTahsin = keg.includes('tahsin') || keg.includes('iqra');
+        
+        const levelStr = `iqra ${selectedIqraLevel}`;
+        const matchesLevel = sur.includes(levelStr) || keg.includes(levelStr) || 
+                             (selectedIqraLevel === 1 && (sur.includes('qoidah') || sur.includes('bab 1') || keg.includes('tahsin')));
+
+        return isTahsin && matchesLevel;
+      });
+
+      const setoranPages = studentSetorans.reduce((acc, curr) => acc + (Number(curr.baris) || 0), 0);
+
+      let finalCapaian = setoranPages;
+      let finalTarget = 32; // Default 32 halaman for each IQRA book
+
+      const editKey = `${key}_iqra_${selectedIqraLevel}`;
+      const localEdit = capaianTahsinLocalEdits[editKey];
+      if (localEdit) {
+        finalCapaian = localEdit.capaian;
+        finalTarget = localEdit.target;
+      }
+
+      const percentage = finalTarget > 0 ? Math.round((finalCapaian / finalTarget) * 100) : 0;
+
+      result.push({
+        id: `tahsin_${stData.id}_${selectedIqraLevel}`,
+        nama: stData.nama,
+        grade: stData.grade,
+        iqraLevel: selectedIqraLevel,
+        capaian: finalCapaian,
+        target: finalTarget,
+        persentase: percentage,
+      });
+    });
+
+    return result;
+  }, [allAccounts, activeStudentsList, capaianZiyadah, setoran, selectedIqraLevel, capaianTahsinLocalEdits, deletedTahsinStudents]);
+
+  const processedCapaianTahsinList = useMemo(() => {
+    let list = mergedCapaianTahsin;
+    
+    if (currentUser && currentUser.role === 'siswa') {
+      const myItem = list.find((item) => item && isStudentNameMatched(item.nama, currentUser.nama));
+      if (myItem) {
+        return [myItem];
+      }
+      return [{
+        id: `synthetic_tahsin_${currentUser.id}`,
+        nama: currentUser.nama,
+        grade: currentUser.grade || '7A',
+        iqraLevel: selectedIqraLevel,
+        capaian: 0,
+        target: 32,
+        persentase: 0
+      }];
+    }
+    
+    if (capaianTahsinGradeFilter !== 'All') {
+      list = list.filter((item) => item && item.grade === capaianTahsinGradeFilter);
+    }
+    
+    if (capaianTahsinSearch.trim() !== '') {
+      const query = capaianTahsinSearch.toLowerCase();
+      list = list.filter((item) => item && String(item.nama || '').toLowerCase().includes(query));
+    }
+
+    const result = [...list];
+    result.sort((a, b) => {
+      if (capaianTahsinSortBy === 'percentage_desc') {
+        return (b.persentase || 0) - (a.persentase || 0);
+      } else if (capaianTahsinSortBy === 'percentage_asc') {
+        return (a.persentase || 0) - (b.persentase || 0);
+      } else {
+        return (a.nama || '').localeCompare(b.nama || '');
+      }
+    });
+
+    return result;
+  }, [mergedCapaianTahsin, currentUser, capaianTahsinGradeFilter, capaianTahsinSearch, capaianTahsinSortBy, selectedIqraLevel]);
+
+  const uniqueCapaianTahsinGrades = useMemo(() => {
+    const grades = mergedCapaianTahsin.map((c) => c?.grade).filter(Boolean);
+    return ['All', ...Array.from(new Set(grades))];
+  }, [mergedCapaianTahsin]);
+
+  const capaianTahsinStats = useMemo(() => {
+    const total = mergedCapaianTahsin.length;
+    if (total === 0) return { total: 0, avgPercentage: 0, reachedTarget: 0, highestPct: 0 };
+    
+    const sumPct = mergedCapaianTahsin.reduce((acc, c) => acc + (c?.persentase || 0), 0);
+    const avgPercentage = Math.round(sumPct / total);
+    const reachedTarget = mergedCapaianTahsin.filter((c) => (c?.persentase || 0) >= 100).length;
+    const highestPct = mergedCapaianTahsin.reduce((max, c) => Math.max(max, c?.persentase || 0), 0);
+
+    return { total, avgPercentage, reachedTarget, highestPct };
+  }, [mergedCapaianTahsin]);
 
   const uniqueCapaianGrades = useMemo(() => {
     const grades = mergedCapaianZiyadah.map((c) => c?.grade).filter(Boolean);
@@ -2605,7 +2802,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Tab: Capaian Target */}
+              {/* Tab: Capaian Target Ziyadah */}
               <div className="relative group/menu w-full flex justify-center">
                 <button
                   id="tab-capaian-ziyadah-btn"
@@ -2621,6 +2818,25 @@ export default function App() {
                 {/* Tooltip Description */}
                 <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
                   Capaian Target Ziyadah
+                </div>
+              </div>
+
+              {/* Tab: Capaian Target Tahsin (IQRA) */}
+              <div className="relative group/menu w-full flex justify-center">
+                <button
+                  id="tab-capaian-tahsin-btn"
+                  onClick={() => { setActiveTab('capaian_tahsin'); setShowConfig(false); }}
+                  className={`flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer w-11 h-11 border ${
+                    activeTab === 'capaian_tahsin'
+                      ? 'bg-blue-50 border-blue-200 text-[#0000FE] shadow-sm scale-105'
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent'
+                  }`}
+                >
+                  <BookOpen className="w-5 h-5 text-[#0000FE]" />
+                </button>
+                {/* Tooltip Description */}
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900/95 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-lg opacity-0 pointer-events-none group-hover/menu:opacity-100 group-hover/menu:translate-x-1.5 transition-all duration-200 whitespace-nowrap z-50">
+                  Capaian Target Tahsin (IQRA)
                 </div>
               </div>
 
@@ -4410,18 +4626,30 @@ export default function App() {
                             {percentage}%
                           </span>
                           {currentUser && (currentUser.role === 'admin' || (currentUser.role === 'ustadz' && canCurrentUserEditStudent(item.id, item.nama))) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingCapaianStudent(item.nama);
-                                setEditCapaianValue(item.capaian);
-                                setEditTargetValue(item.target);
-                              }}
-                              className="p-1 hover:bg-slate-100 text-slate-400 hover:text-[#0000FE] rounded-lg transition-colors border border-transparent hover:border-slate-200"
-                              title="Edit Target & Capaian"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingCapaianStudent(item.nama);
+                                  setEditCapaianValue(item.capaian);
+                                  setEditTargetValue(item.target);
+                                }}
+                                className="p-1 hover:bg-slate-100 text-slate-400 hover:text-[#0000FE] rounded-lg transition-colors border border-transparent hover:border-slate-200"
+                                title="Edit Target & Capaian"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteCapaian({ nama: item.nama, type: 'ziyadah' });
+                                }}
+                                className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                                title="Hapus Nama Siswa & Capaian"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -4521,11 +4749,447 @@ export default function App() {
           </div>
         </div>
 
+        {/* TAB 5: Capaian Target Tahsin (IQRA) */}
+        <div className={activeTab === 'capaian_tahsin' ? 'block' : 'hidden'}>
+          <div className="space-y-6">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-blue-700 via-[#0000FE] to-indigo-800 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden">
+              <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+                <div>
+                  <h2 className="text-xl font-extrabold flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-blue-200 animate-bounce" />
+                    Capaian Target Tahsin (IQRA) Siswa
+                  </h2>
+                  <p className="text-blue-50 text-xs mt-1 font-semibold">
+                    Pantau target capaian membaca dan kelancaran jilid IQRA 1 - 6 ananda (dalam satuan halaman).
+                  </p>
+                </div>
+                {currentUser && (currentUser.role === 'ustadz' || currentUser.role === 'admin') && (
+                  <span className="bg-white/20 text-white text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-wider border border-white/20">
+                    {currentUser.role === 'admin' ? 'Mode Administrator' : 'Mode Ustadz'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* IQRA 1 - 6 Selector Bar */}
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Pilih Jilid IQRA:</span>
+                  <span className="text-[10px] font-semibold text-slate-400">(Satuan: Halaman)</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {[1, 2, 3, 4, 5, 6].map((lvl) => {
+                    const isActive = selectedIqraLevel === lvl;
+                    return (
+                      <button
+                        key={`iqra-lvl-btn-${lvl}`}
+                        onClick={() => {
+                          setSelectedIqraLevel(lvl);
+                          setEditingTahsinStudent(null);
+                        }}
+                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 ${
+                          isActive
+                            ? 'bg-[#0000FE] text-white shadow-md shadow-blue-500/20 scale-105'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                        }`}
+                      >
+                        IQRA {lvl}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Key Stats Cards Grid */}
+            {currentUser?.role === 'siswa' ? (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Total</span>
+                    <div className="p-2 bg-slate-50 text-slate-500 rounded-xl">
+                      <Target className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-slate-800">
+                      {processedCapaianTahsinList[0]?.target || 32} Halaman
+                    </h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Target IQRA {selectedIqraLevel}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Capaian Tahsin</span>
+                    <div className="p-2 bg-blue-50 text-[#0000FE] rounded-xl">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-[#0000FE]">{processedCapaianTahsinList[0]?.capaian || 0} Halaman</h4>
+                    <p className="text-[9px] text-blue-600 font-semibold mt-0.5">Capaian IQRA {selectedIqraLevel}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider font-extrabold">Persentase</span>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                      <Award className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-emerald-700">{processedCapaianTahsinList[0]?.persentase || 0}%</h4>
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                      <div className="bg-emerald-500 h-full" style={{ width: `${Math.min(processedCapaianTahsinList[0]?.persentase || 0, 100)}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider font-extrabold">Sisa Target</span>
+                    <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-amber-700">
+                      {Math.max(0, (processedCapaianTahsinList[0]?.target || 32) - (processedCapaianTahsinList[0]?.capaian || 0))} Halaman
+                    </h4>
+                    <p className="text-[9px] text-amber-600 font-semibold mt-0.5">Sisa halaman IQRA {selectedIqraLevel}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Siswa</span>
+                    <div className="p-2 bg-slate-50 text-slate-500 rounded-xl">
+                      <Users className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-slate-800">{capaianTahsinStats.total}</h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Siswa terdaftar IQRA {selectedIqraLevel}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Rata-rata Capaian</span>
+                    <div className="p-2 bg-blue-50 text-[#0000FE] rounded-xl">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-[#0000FE]">{capaianTahsinStats.avgPercentage}%</h4>
+                    <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
+                      <div className="bg-[#0000FE] h-full" style={{ width: `${Math.min(capaianTahsinStats.avgPercentage, 100)}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider font-extrabold">Mencapai Target</span>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-emerald-700">{capaianTahsinStats.reachedTarget}</h4>
+                    <p className="text-[9px] text-emerald-600 font-bold mt-0.5 font-sans">Lulus IQRA {selectedIqraLevel} 🎉</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider font-extrabold">Capaian Tertinggi</span>
+                    <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                      <Trophy className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h4 className="text-xl font-black text-amber-700">{capaianTahsinStats.highestPct}%</h4>
+                    <p className="text-[9px] text-amber-600 font-semibold mt-0.5">Persentase IQRA {selectedIqraLevel} tertinggi</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Filter controls panel - ONLY shown for Ustadz/Admin */}
+            {currentUser && currentUser.role !== 'siswa' && (
+              <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
+                
+                {/* Search */}
+                <div className="relative w-full md:w-72">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <input
+                    id="input-capaian-tahsin-search"
+                    type="text"
+                    placeholder="Cari nama siswa..."
+                    value={capaianTahsinSearch}
+                    onChange={(e) => setCapaianTahsinSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#0000FE] focus:ring-1 focus:ring-[#0000FE]"
+                  />
+                </div>
+
+                {/* Dropdowns */}
+                <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                  <div className="flex items-center gap-1 w-full sm:w-auto">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Kelas:</span>
+                    <select
+                      id="select-capaian-tahsin-grade-filter"
+                      value={capaianTahsinGradeFilter}
+                      onChange={(e) => setCapaianTahsinGradeFilter(e.target.value)}
+                      className="w-full sm:w-auto px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0000FE]"
+                    >
+                      {uniqueCapaianTahsinGrades.map((grade, idx) => (
+                        <option key={`tahsin-grade-${grade}-${idx}`} value={grade}>{grade === 'All' ? 'Semua Kelas' : grade}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1 w-full sm:w-auto">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Urutan:</span>
+                    <select
+                      id="select-capaian-tahsin-sort-filter"
+                      value={capaianTahsinSortBy}
+                      onChange={(e) => setCapaianTahsinSortBy(e.target.value as any)}
+                      className="w-full sm:w-auto px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0000FE]"
+                    >
+                      <option value="percentage_desc">Capaian Tertinggi</option>
+                      <option value="percentage_asc">Capaian Terendah</option>
+                      <option value="name">Nama Siswa (A-Z)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Students list cards/grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {processedCapaianTahsinList.length === 0 ? (
+                <div className="col-span-full bg-slate-50 border border-dashed border-slate-200 rounded-3xl p-12 text-center">
+                  <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 text-xs font-bold font-sans">Tidak ada data capaian IQRA {selectedIqraLevel} yang cocok.</p>
+                  <p className="text-slate-400 text-[10px] mt-0.5">Silakan ganti kata kunci pencarian atau filter kelas Anda.</p>
+                </div>
+              ) : (
+                processedCapaianTahsinList.map((item, idx) => {
+                  const percentage = item.persentase !== undefined && item.persentase !== null ? item.persentase : 0;
+                  
+                  let colorTheme = {
+                    bg: 'bg-rose-50 border-rose-100',
+                    text: 'text-rose-700',
+                    bar: 'bg-rose-500',
+                    badge: 'bg-rose-100 text-rose-800 border-rose-200',
+                    label: 'Perlu Bimbingan'
+                  };
+                  if (percentage >= 100) {
+                    colorTheme = {
+                      bg: 'bg-sky-50 border-sky-100 border',
+                      text: 'text-[#0000FE]',
+                      bar: 'bg-gradient-to-r from-blue-500 to-indigo-600',
+                      badge: 'bg-blue-100 text-[#0000FE] border-blue-200 border',
+                      label: `Melampaui IQRA ${selectedIqraLevel} 🎉`
+                    };
+                  } else if (percentage >= 71) {
+                    colorTheme = {
+                      bg: 'bg-emerald-50/50 border-emerald-100 border',
+                      text: 'text-emerald-700',
+                      bar: 'bg-emerald-500',
+                      badge: 'bg-emerald-100 text-emerald-800 border-emerald-200 border',
+                      label: 'Mendekati Target'
+                    };
+                  } else if (percentage >= 36) {
+                    colorTheme = {
+                      bg: 'bg-amber-50/50 border-amber-100 border',
+                      text: 'text-amber-700',
+                      bar: 'bg-amber-500',
+                      badge: 'bg-amber-100 text-amber-800 border-amber-200 border',
+                      label: 'Sedang Berjalan Baik'
+                    };
+                  }
+
+                  const isMe = currentUser && isStudentNameMatched(item.nama, currentUser.nama);
+
+                  return (
+                    <div
+                      key={`capaian-tahsin-${item.id || ''}-${idx}`}
+                      className={`bg-white rounded-3xl p-5 shadow-xs border transition-all duration-300 relative overflow-hidden group hover:shadow-md hover:-translate-y-0.5 ${
+                        isMe ? 'ring-2 ring-[#0000FE] border-[#0000FE]/20' : 'border-slate-100'
+                      }`}
+                    >
+                      {/* Highlight label for logged in student */}
+                      {isMe && (
+                        <div className="absolute top-0 right-0 bg-[#0000FE] text-white text-[8px] font-black uppercase tracking-wider px-3.5 py-1 rounded-bl-xl shadow-xs font-sans">
+                          Tahsin Saya
+                        </div>
+                      )}
+
+                      {/* Header row */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          {profilePics[item.nama] ? (
+                            <img 
+                              src={profilePics[item.nama]} 
+                              alt={item.nama} 
+                              className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-xs shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-black text-xs uppercase shrink-0">
+                              {item.nama.substring(0, 2)}
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="text-sm font-extrabold text-slate-800 group-hover:text-[#0000FE] transition-colors">
+                              {item.nama}
+                            </h3>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.grade}</span>
+                              <span className="text-[9px] bg-slate-100 text-slate-600 font-black px-1.5 py-0.5 rounded-md">IQRA {selectedIqraLevel}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${colorTheme.badge}`}>
+                            {percentage}%
+                          </span>
+                          {/* ONLY for ustadz/admin */}
+                          {currentUser && (currentUser.role === 'admin' || (currentUser.role === 'ustadz' && canCurrentUserEditStudent(item.id, item.nama))) && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTahsinStudent(item.nama);
+                                  setEditTahsinCapaianValue(item.capaian);
+                                  setEditTahsinTargetValue(item.target || 32);
+                                }}
+                                className="p-1 hover:bg-slate-100 text-slate-400 hover:text-[#0000FE] rounded-lg transition-colors border border-transparent hover:border-slate-200"
+                                title="Edit Target & Capaian IQRA"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteCapaian({ nama: item.nama, type: 'tahsin', iqraLevel: selectedIqraLevel });
+                                }}
+                                className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                                title="Hapus Nama Siswa & Capaian Tahsin"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {editingTahsinStudent === item.nama ? (
+                        <div className="mt-4 p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Capaian (Halaman)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editTahsinCapaianValue}
+                                onChange={(e) => setEditTahsinCapaianValue(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#0000FE]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Target (Halaman)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editTahsinTargetValue}
+                                onChange={(e) => setEditTahsinTargetValue(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#0000FE]"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between gap-1.5 pt-1.5">
+                            <span className="text-[9px] text-slate-400 font-semibold">*Satuan: Halaman</span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setEditingTahsinStudent(null)}
+                                className="px-2.5 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-200 rounded-lg transition-colors"
+                              >
+                                Batal
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const editKey = `${item.nama.toLowerCase().trim()}_iqra_${selectedIqraLevel}`;
+                                  setCapaianTahsinLocalEdits((prev) => ({
+                                    ...prev,
+                                    [editKey]: { capaian: editTahsinCapaianValue, target: editTahsinTargetValue }
+                                  }));
+                                  setEditingTahsinStudent(null);
+                                }}
+                                className="px-3 py-1 bg-[#0000FE] text-white text-[10px] font-black rounded-lg hover:bg-blue-700 transition-colors shadow-xs"
+                              >
+                                Simpan
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Progress section */}
+                          <div className="mt-4 space-y-2">
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                              <span className="flex items-center gap-1 font-sans">
+                                <TrendingUp className="w-3.5 h-3.5 text-[#0000FE]" />
+                                Capaian: <strong className="text-[#0000FE] font-extrabold">{item.capaian}</strong> halaman
+                              </span>
+                              <span className="flex items-center gap-1 font-sans">
+                                <Target className="w-3.5 h-3.5 text-slate-400" />
+                                Target: <strong className="text-slate-700 font-extrabold">{item.target}</strong> halaman
+                              </span>
+                            </div>
+
+                            {/* Progress Bar background and fill */}
+                            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden relative">
+                              <div
+                                className={`h-full rounded-full transition-all duration-1000 ${colorTheme.bar}`}
+                                style={{ width: `${Math.min(percentage, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Bottom status badge */}
+                          <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-[10px] font-bold">
+                            <span className="text-slate-400 uppercase tracking-wider">Status Capaian:</span>
+                            <span className={`px-2 py-0.5 rounded-md ${colorTheme.bg} ${colorTheme.text} border text-[9px] font-black uppercase tracking-wide font-sans`}>
+                              {colorTheme.label}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
         {(currentUser?.role === 'ustadz' || currentUser?.role === 'admin') && (
           <div className={activeTab === 'database' ? 'block' : 'hidden'}>
             <DatabaseTab
               setoran={setoran}
               gmailAccounts={gmailAccounts}
+              currentUser={currentUser}
+              capaianZiyadahList={mergedCapaianZiyadah}
               onSendReminder={(studentName, email) => {
                 setLastCreatedRecord({
                   studentName,
@@ -4905,6 +5569,45 @@ export default function App() {
           activeStudents={activeStudentsList}
           onClose={() => setShowRankingModal(false)}
         />
+      )}
+
+      {/* Modal Confirm Delete Capaian Student */}
+      {confirmDeleteCapaian && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-black text-slate-800 text-center">Konfirmasi Hapus Data Capaian</h3>
+            <p className="text-xs text-slate-500 font-semibold text-center mt-2 leading-relaxed">
+              Apakah Anda yakin ingin menghapus nama siswa <strong className="text-slate-800">{confirmDeleteCapaian.nama}</strong> beserta seluruh capaian & targetnya pada menu {confirmDeleteCapaian.type === 'ziyadah' ? 'Capaian Target Ziyadah' : `Tahsin IQRA ${confirmDeleteCapaian.iqraLevel}`}?
+            </p>
+            <div className="flex items-center gap-3 mt-6">
+              <button
+                onClick={() => setConfirmDeleteCapaian(null)}
+                className="w-1/2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black rounded-xl text-xs transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmDeleteCapaian.type === 'ziyadah') {
+                    const key = confirmDeleteCapaian.nama.toLowerCase().trim();
+                    setDeletedZiyadahStudents((prev) => ({ ...prev, [key]: true }));
+                  } else {
+                    const key = confirmDeleteCapaian.nama.toLowerCase().trim();
+                    const deleteKey = `${key}_iqra_${confirmDeleteCapaian.iqraLevel || selectedIqraLevel}`;
+                    setDeletedTahsinStudents((prev) => ({ ...prev, [deleteKey]: true }));
+                  }
+                  setConfirmDeleteCapaian(null);
+                }}
+                className="w-1/2 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs transition-colors shadow-md shadow-rose-600/20"
+              >
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

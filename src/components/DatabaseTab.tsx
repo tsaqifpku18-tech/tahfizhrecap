@@ -1,15 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, Filter, ChevronDown, ChevronUp, Award, BookOpen, 
-  Users, BarChart2, Mail, ExternalLink, RefreshCw, Star 
+  Users, BarChart2, Mail, ExternalLink, RefreshCw, Star, CheckCircle2
 } from 'lucide-react';
-import { Setoran } from '../types';
+import { Setoran, UserSession, CapaianTargetZiyadah } from '../types';
 import { SURAH_LIST, parseSurahString } from './NewAssessmentForm';
 
 interface DatabaseTabProps {
   setoran: Setoran[];
   gmailAccounts: Record<string, string>;
   onSendReminder?: (studentName: string, email: string) => void;
+  currentUser?: UserSession | null;
+  capaianZiyadahList?: CapaianTargetZiyadah[];
 }
 
 // Custom surah ranking: An-Nas (114) is lowest, Al-Baqarah (2) is highest.
@@ -33,7 +35,7 @@ export const getSurahRank = (surahStr: string): number => {
   return -1;
 };
 
-export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: DatabaseTabProps) {
+export function DatabaseTab({ setoran, gmailAccounts, onSendReminder, currentUser, capaianZiyadahList }: DatabaseTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [gradeFilter, setGradeFilter] = useState('All');
   const [sortBy, setSortBy] = useState<'baris' | 'surah'>('baris');
@@ -45,13 +47,11 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
     if (!nama) return '';
     const nameLower = String(nama).toLowerCase().trim();
     
-    // Try exact match in keys
     for (const key of Object.keys(gmailAccounts)) {
       if (String(key).toLowerCase().trim() === nameLower) {
         return gmailAccounts[key];
       }
     }
-    // Try partial/includes match
     for (const key of Object.keys(gmailAccounts)) {
       const kLower = String(key).toLowerCase().trim();
       if (kLower.includes(nameLower) || nameLower.includes(kLower)) {
@@ -61,21 +61,24 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
     return '';
   };
 
-  // Process and aggregate student ziyadah data
+  // Process and aggregate student ziyadah data (including weekly and monthly calculations)
   const studentStats = useMemo(() => {
     const map: Record<string, {
       nama: string;
       grade: string;
       totalBaris: number;
+      weeklyBaris: number;
+      monthlyBaris: number;
       highestSurah: string;
       highestSurahRank: number;
       surahs: Set<string>;
       records: Setoran[];
     }> = {};
 
+    const now = new Date();
+
     setoran.forEach((record) => {
       if (!record || !record.nama) return;
-      // We only aggregate 'Ziyadah' records
       const isZiyadah = record.kegiatan && String(record.kegiatan).toLowerCase() === 'ziyadah';
       if (!isZiyadah) return;
 
@@ -85,6 +88,8 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
           nama: record.nama,
           grade: record.grade || '',
           totalBaris: 0,
+          weeklyBaris: 0,
+          monthlyBaris: 0,
           highestSurah: '-',
           highestSurahRank: -1,
           surahs: new Set<string>(),
@@ -93,9 +98,24 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
       }
 
       const sData = map[studentKey];
+      const barisVal = Number(record.baris) || 0;
       
       // Accumulate lines
-      sData.totalBaris += Number(record.baris) || 0;
+      sData.totalBaris += barisVal;
+
+      // Check weekly / monthly period
+      if (record.tanggalSetoran) {
+        const recDate = new Date(record.tanggalSetoran);
+        if (!isNaN(recDate.getTime())) {
+          const diffDays = (now.getTime() - recDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (diffDays >= -1 && diffDays <= 7) {
+            sData.weeklyBaris += barisVal;
+          }
+          if (recDate.getMonth() === now.getMonth() && recDate.getFullYear() === now.getFullYear()) {
+            sData.monthlyBaris += barisVal;
+          }
+        }
+      }
       
       // Store record
       sData.records.push(record);
@@ -123,16 +143,31 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
     return ['All', ...Array.from(new Set(grades))];
   }, [studentStats]);
 
-  // Filter and sort the aggregated list
-  const filteredAndSortedStudents = useMemo(() => {
-    let result = studentStats.filter(student => {
+  // Filter students based on grade & search query
+  const filteredStudents = useMemo(() => {
+    return studentStats.filter(student => {
       const studentNama = student && student.nama ? String(student.nama) : '';
       const matchesSearch = studentNama.toLowerCase().includes(String(searchQuery || '').toLowerCase());
-      const matchesGrade = gradeFilter === 'All' || student.grade === gradeFilter;
+      
+      let matchesGrade = true;
+      if (gradeFilter === 'Halaqah Saya') {
+        const userGrade = currentUser?.grade || '';
+        const userName = (currentUser?.nama || '').toLowerCase().trim();
+        const matchesUserGrade = userGrade && student.grade.toLowerCase() === userGrade.toLowerCase();
+        const matchesUstadzRecord = student.records.some(r => (r.nama || '').toLowerCase().includes(userName));
+        matchesGrade = matchesUserGrade || matchesUstadzRecord;
+      } else if (gradeFilter !== 'All') {
+        matchesGrade = student.grade === gradeFilter;
+      }
+
       return matchesSearch && matchesGrade;
     });
+  }, [studentStats, searchQuery, gradeFilter, currentUser]);
 
-    // Sort
+  // Filter and sort the aggregated list for rendering table
+  const filteredAndSortedStudents = useMemo(() => {
+    const result = [...filteredStudents];
+
     result.sort((a, b) => {
       if (sortBy === 'baris') {
         const diff = a.totalBaris - b.totalBaris;
@@ -144,21 +179,31 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
     });
 
     return result;
-  }, [studentStats, searchQuery, gradeFilter, sortBy, sortOrder]);
+  }, [filteredStudents, sortBy, sortOrder]);
 
-  // Key Statistics computed
+  // Key Statistics computed STRICTLY on filteredStudents (so when class/grade filter changes, stats reflect selected class)
   const stats = useMemo(() => {
-    const totalStudents = studentStats.length;
-    const totalBaris = studentStats.reduce((sum, s) => sum + s.totalBaris, 0);
+    const totalStudents = filteredStudents.length;
+    const totalBaris = filteredStudents.reduce((sum, s) => sum + s.totalBaris, 0);
     const avgBaris = totalStudents > 0 ? Math.round(totalBaris / totalStudents) : 0;
     
-    // Student with highest baris
     let topBarisStudent = '-';
     let maxBaris = 0;
-    studentStats.forEach(s => {
+    let completedTargetCount = 0;
+
+    filteredStudents.forEach(s => {
       if (s.totalBaris > maxBaris) {
         maxBaris = s.totalBaris;
         topBarisStudent = s.nama;
+      }
+
+      // Calculate target completion (100% completed target)
+      const cz = capaianZiyadahList?.find(c => c && c.nama && c.nama.toLowerCase().trim() === s.nama.toLowerCase().trim());
+      const targetVal = cz?.target && cz.target > 0 ? cz.target : 300;
+      const capaianVal = cz?.capaian !== undefined ? cz.capaian : s.totalBaris;
+      
+      if (capaianVal >= targetVal || (targetVal > 0 && Math.round((capaianVal / targetVal) * 100) >= 100)) {
+        completedTargetCount++;
       }
     });
 
@@ -167,9 +212,10 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
       totalBaris,
       avgBaris,
       topBarisStudent,
-      maxBaris
+      maxBaris,
+      completedTargetCount
     };
-  }, [studentStats]);
+  }, [filteredStudents, capaianZiyadahList]);
 
   const toggleSort = (field: 'baris' | 'surah') => {
     if (sortBy === field) {
@@ -205,8 +251,8 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Summary Cards - Now 5 cards responsive grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
         {/* Total Siswa */}
         <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 flex flex-col justify-between">
           <div className="flex items-center justify-between">
@@ -246,6 +292,20 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
           <div className="mt-2">
             <h4 className="text-xl font-black text-slate-800">{stats.avgBaris}</h4>
             <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Baris per siswa</p>
+          </div>
+        </div>
+
+        {/* Completed Target */}
+        <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Completed Target</span>
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h4 className="text-xl font-black text-emerald-700">{stats.completedTargetCount}</h4>
+            <p className="text-[9px] text-emerald-600 font-semibold mt-0.5">Target 100% Tercapai 🎉</p>
           </div>
         </div>
 
@@ -296,6 +356,7 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
                 className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
               >
                 <option value="All">Semua Kelas</option>
+                <option value="Halaqah Saya">Siswa Halaqah Saya</option>
                 {uniqueGrades.filter(g => g !== 'All').map(g => (
                   <option key={`db-grade-filter-${g}`} value={g}>{g}</option>
                 ))}
@@ -346,6 +407,8 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
                 <th className="py-3.5 px-4">Grade</th>
                 <th className="py-3.5 px-4 text-center">Total Baris Ziyadah</th>
                 <th className="py-3.5 px-4">Surah Tertinggi</th>
+                <th className="py-3.5 px-4 text-center">Periode Perminggu</th>
+                <th className="py-3.5 px-4 text-center">Periode Perbulan</th>
                 <th className="py-3.5 px-4 text-center">Hafalan Unik</th>
                 <th className="py-3.5 px-4 text-center">Aksi</th>
               </tr>
@@ -396,6 +459,16 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
                           <span className="text-slate-300">-</span>
                         )}
                       </td>
+                      <td className="py-4 px-4 text-center font-extrabold text-blue-700">
+                        <span className="bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-lg">
+                          {student.weeklyBaris} baris
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-center font-extrabold text-indigo-700">
+                        <span className="bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
+                          {student.monthlyBaris} baris
+                        </span>
+                      </td>
                       <td className="py-4 px-4 text-center font-bold text-slate-500">
                         {student.surahs.size} surah
                       </td>
@@ -425,7 +498,7 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder }: Database
                     {/* Expandable History details */}
                     {isExpanded && (
                       <tr>
-                        <td colSpan={7} className="py-4 px-6 bg-slate-50/40 border-t border-b border-slate-100">
+                        <td colSpan={9} className="py-4 px-6 bg-slate-50/40 border-t border-b border-slate-100">
                           <div className="space-y-3">
                             <h5 className="text-[11px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
                               <BookOpen className="w-4 h-4 text-[#0000FE]" />
