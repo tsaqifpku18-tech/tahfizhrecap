@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { KeyRound, User, Eye, EyeOff, AlertCircle, Sparkles, Loader2, BookOpen, ShieldCheck } from 'lucide-react';
 import { UserAccount, UserSession } from '../types';
-import { DEMO_AKUN, processAccountsFromResponse } from '../data';
+import { DEMO_AKUN } from '../data';
 import { AlWildanLogo } from './AlWildanLogo';
 // @ts-ignore
 import alWildanBuilding from '../assets/al_wildan_building.jpg';
@@ -26,14 +26,14 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
   useEffect(() => {
     const fetchAccounts = async () => {
       if (usingDemoData || !appsScriptUrl) {
-        setAccounts(processAccountsFromResponse(null));
+        setAccounts(DEMO_AKUN);
         return;
       }
 
       setIsFetchingAccounts(true);
       try {
-        // Try to fetch full dataset or accounts tab from Google Apps Script Web App
-        const response = await fetch(`${appsScriptUrl}${appsScriptUrl.includes('?') ? '&' : '?'}tab=akun`, {
+        // Try to fetch from the Google Apps Script Web App
+        const response = await fetch(`${appsScriptUrl}?tab=akun`, {
           method: 'GET',
           mode: 'cors',
           headers: {
@@ -43,15 +43,19 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
 
         if (response.ok) {
           const res = await response.json();
-          const cleanAccounts = processAccountsFromResponse(res, res?.data || [], res?.capaian_ziyadah || []);
-          setAccounts(cleanAccounts);
-          console.log('Processed accounts for login:', cleanAccounts.length);
+          if (res && res.status === 'success' && Array.isArray(res.data) && res.data.length > 0) {
+            setAccounts(res.data);
+            console.log('Loaded accounts from Google Sheets:', res.data.length);
+          } else {
+            console.warn('Apps Script returned no accounts or empty data, falling back to local demo accounts');
+            setAccounts(DEMO_AKUN);
+          }
         } else {
-          setAccounts(processAccountsFromResponse(null));
+          setAccounts(DEMO_AKUN);
         }
       } catch (err) {
-        console.error('Failed to fetch accounts from sheet, using processed accounts:', err);
-        setAccounts(processAccountsFromResponse(null));
+        console.error('Failed to fetch accounts from sheet, falling back to local accounts:', err);
+        setAccounts(DEMO_AKUN);
       } finally {
         setIsFetchingAccounts(false);
       }
@@ -87,95 +91,33 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
       const enteredId = idInput.trim().toLowerCase();
       const enteredPass = passwordInput.trim();
 
-      // 1. Flexible matching against loaded accounts list
-      let matchedAccount = accounts.find((acc) => {
-        const accId = (acc.id || '').toLowerCase();
-        const accNama = (acc.nama || '').toLowerCase();
-        const accCleanId = accNama.replace(/\s+/g, '_');
-        const firstWord = accNama.split(' ')[0];
+      // Find account
+      const matchedAccount = accounts.find(
+        (acc) => (acc.id || '').toLowerCase() === enteredId && acc.password === enteredPass
+      );
 
-        const isIdOrNameMatch = 
-          accId === enteredId ||
-          accNama === enteredId ||
-          accCleanId === enteredId ||
-          `student_${accCleanId}` === enteredId ||
-          firstWord === enteredId ||
-          (accId.includes('student_') && accId.replace('student_', '') === enteredId);
+      // Fallback matching to DEMO_AKUN if live didn't find and we are in online mode but user wanted to login with demo
+      const account = matchedAccount || DEMO_AKUN.find(
+        (acc) => (acc.id || '').toLowerCase() === enteredId && acc.password === enteredPass
+      );
 
-        if (!isIdOrNameMatch) return false;
-
-        const accPass = (acc.password || '').trim();
-        const isPassMatch = 
-          accPass === enteredPass ||
-          accPass === '' ||
-          enteredPass === 'password123' ||
-          enteredPass === '123456' ||
-          enteredPass === '123' ||
-          enteredPass === '1234' ||
-          enteredPass === accId ||
-          enteredPass === accNama ||
-          enteredPass === `${firstWord}123` ||
-          enteredPass === `${enteredId}123`;
-
-        return isPassMatch;
-      });
-
-      // 2. Fallback check on DEMO_AKUN explicitly
-      if (!matchedAccount) {
-        matchedAccount = DEMO_AKUN.find((acc) => {
-          const accId = (acc.id || '').toLowerCase();
-          const accNama = (acc.nama || '').toLowerCase();
-          const accCleanId = accNama.replace(/\s+/g, '_');
-          const firstWord = accNama.split(' ')[0];
-
-          const isIdOrNameMatch = 
-            accId === enteredId ||
-            accNama === enteredId ||
-            accCleanId === enteredId ||
-            `student_${accCleanId}` === enteredId ||
-            firstWord === enteredId;
-
-          const isPassMatch = 
-            acc.password === enteredPass ||
-            enteredPass === 'password123' ||
-            enteredPass === `${firstWord}123` ||
-            enteredPass === '123456' ||
-            enteredPass === '123';
-
-          return isIdOrNameMatch && isPassMatch;
-        });
-      }
-
-      // 3. Ultra-flexible fallback: Allow login if user typed admin/ustadz/student
-      if (!matchedAccount) {
-        if (enteredId.includes('admin')) {
-          matchedAccount = { id: enteredId, nama: 'Admin Tahfizh', password: enteredPass, role: 'admin' };
-        } else if (enteredId.includes('ustadz')) {
-          matchedAccount = { id: idInput.trim(), nama: idInput.trim(), password: enteredPass, role: 'ustadz' };
-        } else if (enteredId.length >= 2) {
-          const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
-          matchedAccount = { id: `student_${enteredId}`, nama: capitalize(idInput.trim()), password: enteredPass, role: 'siswa' };
-        }
-      }
-
-      if (matchedAccount) {
-        // Determine role
-        const namaLower = (matchedAccount.nama || '').toLowerCase();
-        const idLower = (matchedAccount.id || '').toLowerCase();
-        let finalRole: 'admin' | 'ustadz' | 'siswa' = matchedAccount.role || 'siswa';
-
-        if (namaLower.includes('admin') || idLower.includes('admin')) {
+      if (account) {
+        // Determine role based on name or ID
+        const namaLower = (account.nama || '').toLowerCase();
+        let finalRole: 'admin' | 'ustadz' | 'siswa' = 'siswa';
+        if (namaLower.includes('admin')) {
           finalRole = 'admin';
-        } else if (namaLower.includes('ustadz') || idLower.includes('ustadz')) {
+        } else if (namaLower.includes('ustadz')) {
+          finalRole = 'ustadz';
+        } else if (enteredId.includes('ustadz')) {
           finalRole = 'ustadz';
         }
 
         const session: UserSession = {
-          id: matchedAccount.id,
-          nama: matchedAccount.nama,
+          id: account.id,
+          nama: account.nama, // "namaa" column
           role: finalRole,
-          gmail: matchedAccount.gmail,
-          grade: matchedAccount.grade,
+          gmail: account.gmail,
         };
 
         setIsLoading(false);
@@ -184,7 +126,7 @@ export function LoginPage({ appsScriptUrl, usingDemoData, onLoginSuccess, custom
         setIsLoading(false);
         setErrorMsg('ID Pengguna atau Password salah. Silakan coba lagi.');
       }
-    }, 600);
+    }, 800);
   };
 
   return (
