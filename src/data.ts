@@ -165,6 +165,39 @@ const RAW_DEMO_SETORAN: Omit<Setoran, 'satuan'>[] = [
     ctt: "Sangat Lancar",
     status: "Boleh Lanjut",
     surah: "Al-Ghashiyah 1-26"
+  },
+  {
+    id: "0000015",
+    grade: "4 Inter 2",
+    nama: "Rayyan",
+    tanggalSetoran: "2026-09-09",
+    kegiatan: "Ziyadah",
+    baris: 10,
+    ctt: "Sangat Lancar",
+    status: "Boleh Lanjut",
+    surah: "Al-Baqarah 1-15"
+  },
+  {
+    id: "0000016",
+    grade: "4 Inter 2",
+    nama: "Khalid",
+    tanggalSetoran: "2026-09-09",
+    kegiatan: "Ziyadah",
+    baris: 7,
+    ctt: "Lancar",
+    status: "Boleh Lanjut",
+    surah: "Ali 'Imran 1-10"
+  },
+  {
+    id: "0000017",
+    grade: "4 Inter 2",
+    nama: "Arfan",
+    tanggalSetoran: "2026-09-10",
+    kegiatan: "Ziyadah",
+    baris: 8,
+    ctt: "Sangat Lancar",
+    status: "Boleh Lanjut",
+    surah: "An-Nisa' 1-12"
   }
 ];
 
@@ -176,12 +209,15 @@ export const DEMO_SETORAN: Setoran[] = RAW_DEMO_SETORAN.map(item => ({
 export const DEMO_AKUN: UserAccount[] = [
   { id: "ustadz1", nama: "Ustadz Ahmad", password: "password123" },
   { id: "ustadz2", nama: "Ustadzah Rania", password: "password123" },
-  { id: "student_kean", nama: "Kean", password: "kean123" },
-  { id: "student_azzam", nama: "Azzam", password: "azzam123" },
-  { id: "student_ahmad", nama: "Ahmad", password: "ahmad123" },
-  { id: "student_fathir", nama: "Fathir", password: "fathir123" },
-  { id: "student_zaid", nama: "Zaid", password: "zaid123" },
-  { id: "student_rania", nama: "Rania", password: "rania123" }
+  { id: "student_kean", nama: "Kean", password: "kean123", grade: "2 Inter 1" },
+  { id: "student_azzam", nama: "Azzam", password: "azzam123", grade: "2 Inter 2" },
+  { id: "student_ahmad", nama: "Ahmad", password: "ahmad123", grade: "2 Inter 1" },
+  { id: "student_fathir", nama: "Fathir", password: "fathir123", grade: "2 Inter 2" },
+  { id: "student_zaid", nama: "Zaid", password: "zaid123", grade: "2 Inter 1" },
+  { id: "student_rania", nama: "Rania", password: "rania123", grade: "2 Inter 2" },
+  { id: "student_rayyan", nama: "Rayyan", password: "rayyan123", grade: "4 Inter 2" },
+  { id: "student_khalid", nama: "Khalid", password: "khalid123", grade: "4 Inter 2" },
+  { id: "student_arfan", nama: "Arfan", password: "arfan123", grade: "4 Inter 2" }
 ];
 
 export const DEMO_TUGAS_HARIAN: TugasHarian[] = [
@@ -208,6 +244,14 @@ export const DEMO_TUGAS_HARIAN: TugasHarian[] = [
     materi: "Adab terhadap orang tua dan guru",
     ustadz: "Ustadz Ahmad",
     keterangan: "Pelajari dan amalkan adab ke-4 di buku saku."
+  },
+  {
+    id: "t4",
+    tanggal: "2026-07-14",
+    grade: "4 Inter 2",
+    materi: "Ziyadah Surah Al-Baqarah 16-30",
+    ustadz: "Ustadz Ahmad",
+    keterangan: "Setorkan tepat waktu besok pagi."
   }
 ];
 
@@ -220,6 +264,9 @@ export const DEMO_CAPAIAN_TARGET_ZIYADAH: CapaianTargetZiyadah[] = [
   { id: "c6", nama: "Rania", grade: "2 Inter 2", capaian: 310, target: 400, dari: "An-Naba' 1", sampai: "Al-Infitar 15" },
   { id: "c7", nama: "Salma", grade: "2 Inter 2", capaian: 380, target: 400, dari: "An-Naba' 1", sampai: "Al-Mutaffifin 30" },
   { id: "c8", nama: "Yusuf", grade: "2 Inter 1", capaian: 220, target: 400, dari: "An-Naba' 1", sampai: "An-Nazi'at 10" },
+  { id: "c9", nama: "Rayyan", grade: "4 Inter 2", capaian: 320, target: 400, dari: "Al-Baqarah 1", sampai: "Al-Baqarah 100" },
+  { id: "c10", nama: "Khalid", grade: "4 Inter 2", capaian: 280, target: 400, dari: "Ali 'Imran 1", sampai: "Ali 'Imran 75" },
+  { id: "c11", nama: "Arfan", grade: "4 Inter 2", capaian: 350, target: 400, dari: "An-Nisa' 1", sampai: "An-Nisa' 80" }
 ];
 
 export const GOOGLE_APPS_SCRIPT_CODE = `/**

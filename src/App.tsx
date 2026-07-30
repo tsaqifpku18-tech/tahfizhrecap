@@ -38,6 +38,7 @@ import {
   Frown,
   Mail,
   ExternalLink,
+  MessageSquare,
   ShieldCheck,
   Info,
   Newspaper
@@ -460,6 +461,121 @@ export default function App() {
     return {};
   });
 
+  // WhatsApp Accounts State (Loaded from localStorage)
+  const [whatsappAccounts, setWhatsappAccounts] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('tahfizh_whatsapp_accounts');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse tahfizh_whatsapp_accounts', e);
+      }
+    }
+    const savedGmail = localStorage.getItem('tahfizh_gmail_accounts');
+    if (savedGmail) {
+      try {
+        return JSON.parse(savedGmail);
+      } catch (e) {}
+    }
+    return {};
+  });
+
+  const MOTIVATION_QUOTES = [
+    "\"Sebaik-baik kalian adalah orang yang mempelajari Al-Qur'an dan mengajarkannya.\" (HR. Bukhari)",
+    "\"Orang yang lancar membaca Al-Qur'an akan bersama para malaikat yang mulia. Tetap semangat murajaah & ziyadah!\"",
+    "\"Bacalah Al-Qur'an, karena sesungguhnya ia akan datang pada hari kiamat sebagai pemberi syafa'at bagi pembacanya.\" (HR. Muslim)",
+    "\"Penghafal Al-Qur'an adalah keluarga Allah di bumi. Semoga ananda senantiasa Istiqomah dan dijaga hafalan serta ilmunya.\"",
+    "\"Setiap ayat yang dihafal adalah satu peninggian derajat di surga. Terus padamkan rasa lelah dengan ridho Allah.\"",
+    "\"Kemudahan Al-Qur'an dijanjikan oleh Allah SWT dalam Surah Al-Qamar. Semoga Allah memudahkan langkah ananda.\"",
+    "\"Milikilah mahkota kemuliaan di akhirat kelak untuk kedua orang tua melalui hafalan Al-Qur'an ananda. Baarokallahu Fiykum.\""
+  ];
+
+  const handleSendWhatsAppMessage = (studentName?: string, customPhone?: string) => {
+    const targetName = studentName || forwardStudentName || (lastCreatedRecord ? lastCreatedRecord.studentName : '');
+    
+    // Find student's WhatsApp phone number
+    let phone = customPhone || whatsappAccounts[targetName] || gmailAccounts[targetName] || '';
+    if (!phone && targetName) {
+      for (const [k, v] of Object.entries(whatsappAccounts)) {
+        if (k.toLowerCase().trim() === targetName.toLowerCase().trim() || k.toLowerCase().includes(targetName.toLowerCase())) {
+          phone = v;
+          break;
+        }
+      }
+    }
+
+    if (!phone) {
+      const enteredPhone = prompt(`Masukkan Nomor WhatsApp Wali Murid ${targetName || 'Siswa'}:`, '081234567890');
+      if (!enteredPhone) return;
+      phone = enteredPhone;
+    }
+
+    // Normalize phone number to international format (628...)
+    let cleanPhone = phone.replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '62' + cleanPhone.substring(1);
+    }
+
+    // Find student's latest setoran/penilaian
+    const studentSetoranList = targetName ? setoran.filter(s => 
+      s.nama.toLowerCase().trim() === targetName.toLowerCase().trim() ||
+      s.nama.toLowerCase().includes(targetName.toLowerCase().trim()) ||
+      targetName.toLowerCase().includes(s.nama.toLowerCase().trim())
+    ) : setoran;
+    const latestSetoran = studentSetoranList.length > 0 ? studentSetoranList[0] : null;
+
+    // Find student's latest tugas harian
+    const studentTugasList = targetName ? tugasHarian.filter(t => 
+      (t.siswa && (t.siswa.toLowerCase().includes(targetName.toLowerCase()) || targetName.toLowerCase().includes(t.siswa.toLowerCase()))) ||
+      t.grade === 'All' || (latestSetoran && t.grade === latestSetoran.grade)
+    ) : tugasHarian;
+    const latestTugas = studentTugasList.length > 0 ? studentTugasList[0] : null;
+
+    // Pick a motivational quote
+    const quoteIndex = Math.floor(Math.random() * MOTIVATION_QUOTES.length);
+    const motivationQuote = MOTIVATION_QUOTES[quoteIndex];
+
+    // Build the WhatsApp message content
+    let messageText = `Assalamu'alaikum Warahmatullahi Wabarakatuh.\n`;
+    messageText += `Yth. Bapak/Ibu Wali Murid ananda *${targetName || latestSetoran?.nama || 'Siswa'}* ${latestSetoran?.grade ? `(${latestSetoran.grade})` : ''},\n\n`;
+    messageText += `Berikut kami sampaikan Laporan Penilaian Tahfizh & Tugas Harian Ananda Terbaru:\n\n`;
+
+    messageText += `📖 *PENILAIAN TAHFIZH TERBARU*\n`;
+    if (latestSetoran) {
+      messageText += `• Tanggal: ${latestSetoran.tanggalSetoran}\n`;
+      messageText += `• Kegiatan: ${latestSetoran.kegiatan} (${latestSetoran.surah || '-'})\n`;
+      messageText += `• Jumlah: ${latestSetoran.baris} ${latestSetoran.satuan || getSatuanByKegiatan(latestSetoran.kegiatan)}\n`;
+      messageText += `• Catatan/Nilai: ${latestSetoran.ctt}\n`;
+      messageText += `• Status: *${latestSetoran.status}*\n`;
+    } else {
+      messageText += `• Belum ada data penilaian setoran terbaru.\n`;
+    }
+
+    messageText += `\n📝 *TUGAS HARIAN ANANDA*\n`;
+    if (latestSetoran && (latestSetoran.tugasZiyadah || latestSetoran.tugasMurojaah || latestSetoran.tugasMateri)) {
+      if (latestSetoran.tugasZiyadah) messageText += `• Tugas Ziyadah: ${latestSetoran.tugasZiyadah}\n`;
+      if (latestSetoran.tugasMurojaah) messageText += `• Tugas Murojaah: ${latestSetoran.tugasMurojaah}\n`;
+      if (latestSetoran.tugasMateri) messageText += `• Tugas Materi: ${latestSetoran.tugasMateri}\n`;
+    } else if (latestTugas) {
+      messageText += `• Tanggal Tugas: ${latestTugas.tanggal}\n`;
+      messageText += `• Materi/Tugas: ${latestTugas.materi}\n`;
+      if (latestTugas.keterangan) messageText += `• Keterangan: ${latestTugas.keterangan}\n`;
+    } else {
+      messageText += `• Tidak ada tugas khusus hari ini.\n`;
+    }
+
+    messageText += `\n✨ *MOTIVASI UNTUK ANANDA*\n`;
+    messageText += `${motivationQuote}\n\n`;
+    messageText += `Semoga ananda senantiasa istiqomah dan mendapat kemudahan dalam menghafal Al-Qur'an.\n`;
+    messageText += `Jazakumullah Khairan Katsiran. Baarokallahu Fiykum.`;
+
+    const waUrl = cleanPhone 
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(messageText)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(messageText)}`;
+
+    window.open(waUrl, '_blank');
+  };
+
   // Derived state for forward notifications
   const forwardStudentName = useMemo(() => {
     if (manualForwardStudentName) return manualForwardStudentName;
@@ -496,6 +612,30 @@ export default function App() {
     if (manualForwardEmail) return manualForwardEmail;
     return getStudentGmail(forwardStudentName);
   }, [forwardStudentName, gmailAccounts, manualForwardEmail]);
+
+  const getStudentWhatsapp = (nama: string) => {
+    if (!nama) return '';
+    const nameLower = nama.toLowerCase().trim();
+    if (whatsappAccounts) {
+      for (const key of Object.keys(whatsappAccounts)) {
+        if (key.toLowerCase().trim() === nameLower) {
+          return whatsappAccounts[key];
+        }
+      }
+      for (const key of Object.keys(whatsappAccounts)) {
+        const kLower = key.toLowerCase().trim();
+        if (kLower.includes(nameLower) || nameLower.includes(kLower)) {
+          return whatsappAccounts[key];
+        }
+      }
+    }
+    return '';
+  };
+
+  const forwardPhone = useMemo(() => {
+    if (manualForwardEmail) return manualForwardEmail;
+    return getStudentWhatsapp(forwardStudentName) || getStudentGmail(forwardStudentName);
+  }, [forwardStudentName, whatsappAccounts, gmailAccounts, manualForwardEmail]);
 
   const handleSyncGmail = async () => {
     setIsGmailSyncing(true);
@@ -760,6 +900,46 @@ export default function App() {
         });
       } catch (err) {
         console.error('Failed to sync gmail to spreadsheet:', err);
+      }
+    }
+  };
+
+  const handleUpdateWhatsapp = async (name: string, whatsapp: string) => {
+    const updated = { ...whatsappAccounts };
+    if (whatsapp) {
+      updated[name] = whatsapp;
+    } else {
+      delete updated[name];
+    }
+    setWhatsappAccounts(updated);
+    localStorage.setItem('tahfizh_whatsapp_accounts', JSON.stringify(updated));
+
+    if (currentUser && currentUser.nama === name) {
+      const updatedSession = { ...currentUser, whatsapp };
+      setCurrentUser(updatedSession);
+      localStorage.setItem('tahfizh_user_session', JSON.stringify(updatedSession));
+    }
+
+    if (!usingDemoData && settings.appsScriptUrl) {
+      try {
+        const userId = currentUser?.id || name;
+        await fetch(settings.appsScriptUrl, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({
+            id: userId,
+            nama: name,
+            whatsapp: whatsapp,
+            targetTab: 'akun',
+            action: 'edit'
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to sync whatsapp to spreadsheet:', err);
       }
     }
   };
@@ -1226,9 +1406,12 @@ export default function App() {
   }, [mergedCapaianTahsin]);
 
   const uniqueCapaianGrades = useMemo(() => {
-    const grades = mergedCapaianZiyadah.map((c) => c?.grade).filter(Boolean);
-    return ['All', ...Array.from(new Set(grades))];
-  }, [mergedCapaianZiyadah]);
+    const gradesFromCapaian = mergedCapaianZiyadah.map((c) => c?.grade).filter(Boolean);
+    const gradesFromSetoran = setoran.map((s) => s?.grade).filter(Boolean);
+    const gradesFromStudents = activeStudentsList.map((s) => s?.grade).filter(Boolean);
+    const allGrades = Array.from(new Set([...gradesFromCapaian, ...gradesFromSetoran, ...gradesFromStudents]));
+    return ['All', ...allGrades.sort()];
+  }, [mergedCapaianZiyadah, setoran, activeStudentsList]);
 
   // Student Rank Info for Sidebar Icon & Quick View
   const studentRankInfo = useMemo(() => {
@@ -1321,7 +1504,7 @@ export default function App() {
     
     // If user filtered by grade:
     if (capaianGradeFilter !== 'All') {
-      list = list.filter((item) => item && item.grade === capaianGradeFilter);
+      list = list.filter((item) => item && isGradeMatched(item.grade, capaianGradeFilter));
     }
     
     // If user searched for name:
@@ -1650,7 +1833,13 @@ export default function App() {
     }
 
     // Optimistically update local state immediately so user submission never fails!
-    setSetoran((prev) => [recordWithId, ...prev.filter((s) => String(s.id) !== String(recordWithId.id))]);
+    setSetoran((prev) => {
+      const updated = [recordWithId, ...prev.filter((s) => String(s.id) !== String(recordWithId.id))];
+      try {
+        localStorage.setItem('tahfizh_local_setoran', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     setIsSubmitting(false);
     setLastAction({
       type: 'add',
@@ -1678,7 +1867,11 @@ export default function App() {
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
-        body: JSON.stringify(recordWithId),
+        body: JSON.stringify({
+          ...recordWithId,
+          targetTab: 'setoran',
+          action: 'create',
+        }),
       });
 
       let res: any = null;
@@ -1739,7 +1932,13 @@ export default function App() {
     const originalRecord = setoran.find((s) => s.id === updatedRecord.id);
     
     // Optimistically update local state immediately
-    setSetoran((prev) => prev.map((s) => s.id === updatedRecord.id ? updatedRecord : s));
+    setSetoran((prev) => {
+      const updated = prev.map((s) => s.id === updatedRecord.id ? updatedRecord : s);
+      try {
+        localStorage.setItem('tahfizh_local_setoran', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     setIsSubmitting(false);
     setEditingSetoran(null);
     if (originalRecord) {
@@ -1766,6 +1965,7 @@ export default function App() {
         },
         body: JSON.stringify({
           ...updatedRecord,
+          targetTab: 'setoran',
           action: 'edit'
         }),
       });
@@ -1852,7 +2052,13 @@ export default function App() {
     }
 
     // Optimistically update local state
-    setSetoran((prev) => prev.filter((s) => s.id !== recordToDelete.id));
+    setSetoran((prev) => {
+      const updated = prev.filter((s) => s.id !== recordToDelete.id);
+      try {
+        localStorage.setItem('tahfizh_local_setoran', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     if (editingSetoran?.id === recordToDelete.id) {
       setEditingSetoran(null);
     }
@@ -1877,6 +2083,7 @@ export default function App() {
         },
         body: JSON.stringify({
           id: recordToDelete.id,
+          targetTab: 'setoran',
           action: 'delete'
         }),
       });
@@ -3218,12 +3425,12 @@ export default function App() {
                 <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200 space-y-4 animate-in fade-in slide-in-from-top duration-300">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-50 text-[#0000FE] rounded-xl border border-blue-100">
-                        <Mail className="w-4 h-4 text-[#0000FE]" />
+                      <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                        <MessageSquare className="w-4 h-4 text-emerald-600" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-black text-slate-800">Forward Reminder ke G-MAIL Siswa</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">Kirim notifikasi email instan ke akun G-mail terdaftar milik siswa.</p>
+                        <h4 className="text-sm font-black text-slate-800">Forward Info Tahfizh ke No. WhatsApp Orang Tua/Siswa</h4>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">Kirim pesan informasi penilaian tahfizh & tugas harian ananda beserta kata motivasi langsung ke WhatsApp.</p>
                       </div>
                     </div>
                     {lastCreatedRecord ? (
@@ -3237,107 +3444,46 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Bagian Sinkronisasi Gmail Ustadz */}
-                  <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex flex-col gap-3.5 text-xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-semibold">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-2.5 h-2.5 rounded-full ${ustadzGmailUser && ustadzGmailToken ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                        <div>
-                          <span className="text-slate-500 font-bold">Sinkronisasi Gmail Ustadz: </span>
-                          {ustadzGmailUser && ustadzGmailToken ? (
-                            <span className="text-emerald-600 font-black">{ustadzGmailUser.email} (Aktif)</span>
-                          ) : (
-                            <span className="text-slate-400 font-black">Belum Terhubung</span>
-                          )}
-                        </div>
-                      </div>
-                      {ustadzGmailUser && ustadzGmailToken ? (
-                        <button
-                          type="button"
-                          onClick={handleDisconnectGmail}
-                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-xl text-[10px] font-extrabold transition-all cursor-pointer"
-                        >
-                          Putuskan Koneksi
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isGmailSyncing}
-                          onClick={handleSyncGmail}
-                          className="px-4 py-2 bg-[#0000FE] hover:bg-[#0000D0] text-white rounded-xl text-[10px] font-black transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          {isGmailSyncing ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Mail className="w-3.5 h-3.5" />
-                          )}
-                          <span>Hubungkan Gmail Ustadz</span>
-                        </button>
-                      )}
-                    </div>
-                    
-                    {!ustadzGmailToken && (
-                      <div className="p-3 bg-blue-50/50 border border-blue-100/60 rounded-xl text-[10px] leading-relaxed text-blue-700/90 font-medium space-y-1">
-                        <p className="font-bold">💡 Tips Sinkronisasi:</p>
-                        <ul className="list-disc list-inside space-y-0.5">
-                          <li>Jika tombol diklik namun popup tidak muncul, silakan izinkan popup/pop-up blockers pada browser Anda.</li>
-                          <li>Karena preview berjalan di dalam frame (iFrame), beberapa browser membatasi Google Login. Jika gagal, silakan <strong>buka aplikasi ini di Tab Baru (Open in New Tab)</strong> menggunakan tombol di sudut kanan atas AI Studio.</li>
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider">Nama Siswa</label>
                       <input
                         type="text"
-                        placeholder="Ketik nama siswa atau otomatis terisi dari email..."
+                        placeholder="Ketik nama siswa..."
                         value={forwardStudentName}
                         onChange={(e) => setManualForwardStudentName(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider font-sans">Alamat G-MAIL Siswa</label>
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider font-sans">No. WhatsApp Orang Tua / Siswa</label>
                       <input
-                        type="email"
-                        placeholder="Auto-populated atau isi manual jika kosong..."
-                        value={forwardEmail}
+                        type="tel"
+                        placeholder="Masukkan no. WhatsApp (contoh: 081234567890)..."
+                        value={forwardPhone || forwardEmail}
                         onChange={(e) => setManualForwardEmail(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0000FE]/20 focus:border-[#0000FE]"
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider">Isi Pesan Notifikasi</label>
+                    <label className="block text-[11px] font-black text-slate-400 uppercase tracking-wider">Preview Isi Pesan WhatsApp</label>
                     <textarea
                       readOnly
-                      rows={2}
-                      className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 leading-relaxed cursor-not-allowed focus:outline-none"
-                      value={`[REMINDER] Alhamdulillah, homework has been shared to your Tahfizh Recap Account. Please check now, and thank you. Baarokallahu Fiykum.`}
+                      rows={3}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-600 leading-relaxed cursor-not-allowed focus:outline-none"
+                      value={`[LAPORAN TAHFIZH & TUGAS HARIAN] Assalamu'alaikum Warahmatullahi Wabarakatuh. Yth. Bapak/Ibu Wali Murid ananda ${forwardStudentName || 'Siswa'}, berikut kami sampaikan Laporan Penilaian Tahfizh & Tugas Harian Ananda Terbaru beserta Kata Motivasi.`}
                     />
                   </div>
 
                   <button
                     type="button"
-                    disabled={!lastCreatedRecord || !forwardEmail}
-                    onClick={handleSendForwardMessage}
-                    className={`w-full py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer ${
-                      lastCreatedRecord && forwardEmail
-                        ? 'bg-[#0000FE] hover:bg-[#0000D0] text-white active:scale-98'
-                        : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                    }`}
+                    onClick={() => handleSendWhatsAppMessage(forwardStudentName, forwardPhone || forwardEmail)}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-98"
                   >
-                    <ExternalLink className="w-4 h-4" />
-                    <span>
-                      {!lastCreatedRecord 
-                        ? 'Selesaikan Pengisian Form untuk Mengirim' 
-                        : ustadzGmailToken 
-                          ? `Kirim Langsung via Gmail (${ustadzGmailUser?.email || ''})` 
-                          : 'Kirim Notifikasi (Metode Manual)'}
-                    </span>
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Kirim Info Tahfizh ke WhatsApp</span>
                   </button>
                 </div>
               )}
@@ -5231,8 +5377,12 @@ export default function App() {
             <DatabaseTab
               setoran={setoran}
               gmailAccounts={gmailAccounts}
+              whatsappAccounts={whatsappAccounts}
               currentUser={currentUser}
               capaianZiyadahList={mergedCapaianZiyadah}
+              onSendWhatsapp={(studentName, phone) => {
+                handleSendWhatsAppMessage(studentName, phone);
+              }}
               onSendReminder={(studentName, email) => {
                 setLastCreatedRecord({
                   studentName,
@@ -5592,10 +5742,12 @@ export default function App() {
           currentUser={currentUser}
           profilePics={profilePics}
           gmailAccounts={gmailAccounts}
+          whatsappAccounts={whatsappAccounts}
           customLogo={customLogo}
           onUpdateProfilePic={handleUpdateProfilePic}
           onUpdateCustomLogo={handleUpdateCustomLogo}
           onUpdateGmail={handleUpdateGmail}
+          onUpdateWhatsapp={handleUpdateWhatsapp}
           onClose={() => setShowProfileModal(false)}
           setoran={setoran}
           activeStudents={activeStudentsList}

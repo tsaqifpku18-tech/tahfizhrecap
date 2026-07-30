@@ -9,11 +9,13 @@ import { getSatuanByKegiatan } from '../data';
 interface ProfileSettingsModalProps {
   currentUser: UserSession;
   profilePics: Record<string, string>;
-  gmailAccounts: Record<string, string>;
+  gmailAccounts?: Record<string, string>;
+  whatsappAccounts?: Record<string, string>;
   customLogo: string;
   onUpdateProfilePic: (name: string, dataUrl: string) => void;
   onUpdateCustomLogo: (dataUrl: string) => void;
   onUpdateGmail?: (name: string, gmail: string) => void;
+  onUpdateWhatsapp?: (name: string, wa: string) => void;
   onClose: () => void;
   setoran: Setoran[];
   activeStudents: { id: string; nama: string; grade: string }[];
@@ -23,11 +25,13 @@ interface ProfileSettingsModalProps {
 export function ProfileSettingsModal({
   currentUser,
   profilePics,
-  gmailAccounts,
+  gmailAccounts = {},
+  whatsappAccounts = {},
   customLogo,
   onUpdateProfilePic,
   onUpdateCustomLogo,
   onUpdateGmail,
+  onUpdateWhatsapp,
   onClose,
   setoran,
   activeStudents,
@@ -45,8 +49,8 @@ export function ProfileSettingsModal({
   );
   const [isProfileDragging, setIsProfileDragging] = useState(false);
   const [profileError, setProfileError] = useState<string>('');
-  const [gmailInput, setGmailInput] = useState<string>(() => {
-    return gmailAccounts[currentUser.nama] || currentUser.gmail || '';
+  const [whatsappInput, setWhatsappInput] = useState<string>(() => {
+    return whatsappAccounts[currentUser.nama] || currentUser.whatsapp || gmailAccounts[currentUser.nama] || '';
   });
   const profileFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -197,10 +201,13 @@ export function ProfileSettingsModal({
     } else {
       onUpdateProfilePic(currentUser.nama, '');
     }
-    if (onUpdateGmail) {
-      onUpdateGmail(currentUser.nama, gmailInput);
+    if (onUpdateWhatsapp) {
+      onUpdateWhatsapp(currentUser.nama, whatsappInput);
     }
-    triggerToast('Profil & Akun G-Mail berhasil diperbarui!');
+    if (onUpdateGmail) {
+      onUpdateGmail(currentUser.nama, whatsappInput);
+    }
+    triggerToast('Profil & No. WhatsApp berhasil diperbarui!');
   };
 
   const handleRemoveProfile = () => {
@@ -423,21 +430,21 @@ export function ProfileSettingsModal({
                 </div>
               </div>
 
-              {/* G-Mail Account Field */}
+              {/* No. WhatsApp Field */}
               <div className="space-y-2 bg-[#070D19]/50 p-4 rounded-2xl border border-slate-800/50">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Akun G-Mail
+                  No. WhatsApp Wali Murid / Siswa
                 </label>
                 <input
-                  id="profile-gmail-input"
-                  type="email"
-                  placeholder="Masukkan akun G-Mail Anda (contoh: ustadz@gmail.com)"
-                  value={gmailInput}
-                  onChange={(e) => setGmailInput(e.target.value)}
+                  id="profile-whatsapp-input"
+                  type="tel"
+                  placeholder="Masukkan Nomor WhatsApp (contoh: 081234567890 atau 6281234567890)"
+                  value={whatsappInput}
+                  onChange={(e) => setWhatsappInput(e.target.value)}
                   className="w-full px-4 py-2.5 text-xs border border-slate-800 bg-[#070D19] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
                 <p className="text-[10px] text-slate-500 font-semibold">
-                  Semua jenis akun diizinkan untuk mengedit atau mengisi kolom Akun G-Mail ini.
+                  Nomor ini digunakan untuk mengirim laporan penilaian tahfizh & tugas harian langsung ke WhatsApp.
                 </p>
               </div>
 

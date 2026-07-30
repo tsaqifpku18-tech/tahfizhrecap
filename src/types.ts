@@ -33,6 +33,7 @@ export interface UserAccount {
   nama: string;
   password?: string;
   gmail?: string;
+  whatsapp?: string;
   role?: 'admin' | 'ustadz' | 'siswa';
   grade?: string;
 }
@@ -42,6 +43,7 @@ export interface UserSession {
   nama: string;
   role: 'admin' | 'ustadz' | 'siswa';
   gmail?: string;
+  whatsapp?: string;
   grade?: string;
 }
 

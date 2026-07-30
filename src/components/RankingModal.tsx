@@ -12,6 +12,7 @@ import {
   Search
 } from 'lucide-react';
 import { Setoran, CapaianTargetZiyadah, UserSession, UserAccount } from '../types';
+import { isGradeMatched } from '../App';
 
 interface RankingModalProps {
   isOpen: boolean;
@@ -72,7 +73,7 @@ export const RankingModal: React.FC<RankingModalProps> = ({
 
     // Seed from activeStudentsList for this grade
     activeStudentsList.forEach((st) => {
-      if (!st.grade || st.grade === targetGrade) {
+      if (!st.grade || isGradeMatched(st.grade, targetGrade)) {
         const key = st.nama.toLowerCase().trim();
         if (!studentMap.has(key)) {
           studentMap.set(key, { nama: st.nama, grade: st.grade || targetGrade, totalBaris: 0, totalSetoran: 0 });
@@ -82,7 +83,7 @@ export const RankingModal: React.FC<RankingModalProps> = ({
 
     // Seed from capaianZiyadah for this grade
     capaianZiyadah.forEach((cz) => {
-      if (cz.grade === targetGrade) {
+      if (isGradeMatched(cz.grade, targetGrade)) {
         const key = cz.nama.toLowerCase().trim();
         const existing = studentMap.get(key) || { nama: cz.nama, grade: targetGrade, totalBaris: 0, totalSetoran: 0 };
         existing.totalBaris = Math.max(existing.totalBaris, cz.capaian || 0);
@@ -92,7 +93,7 @@ export const RankingModal: React.FC<RankingModalProps> = ({
 
     // Sum setoran for this grade
     setoran.forEach((s) => {
-      if (s.grade === targetGrade) {
+      if (isGradeMatched(s.grade, targetGrade)) {
         const key = s.nama.toLowerCase().trim();
         const existing = studentMap.get(key) || { nama: s.nama, grade: targetGrade, totalBaris: 0, totalSetoran: 0 };
         existing.totalSetoran += 1;

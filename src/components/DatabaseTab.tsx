@@ -8,8 +8,10 @@ import { SURAH_LIST, parseSurahString } from './NewAssessmentForm';
 
 interface DatabaseTabProps {
   setoran: Setoran[];
-  gmailAccounts: Record<string, string>;
+  gmailAccounts?: Record<string, string>;
+  whatsappAccounts?: Record<string, string>;
   onSendReminder?: (studentName: string, email: string) => void;
+  onSendWhatsapp?: (studentName: string, phone?: string) => void;
   currentUser?: UserSession | null;
   capaianZiyadahList?: CapaianTargetZiyadah[];
 }
@@ -35,30 +37,32 @@ export const getSurahRank = (surahStr: string): number => {
   return -1;
 };
 
-export function DatabaseTab({ setoran, gmailAccounts, onSendReminder, currentUser, capaianZiyadahList }: DatabaseTabProps) {
+export function DatabaseTab({ setoran, gmailAccounts = {}, whatsappAccounts = {}, onSendReminder, onSendWhatsapp, currentUser, capaianZiyadahList }: DatabaseTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [gradeFilter, setGradeFilter] = useState('All');
   const [sortBy, setSortBy] = useState<'baris' | 'surah'>('baris');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
 
-  // Helper to find a student's Gmail robustly
-  const getStudentGmail = (nama: string) => {
+  // Helper to find a student's WhatsApp number robustly
+  const getStudentWhatsapp = (nama: string) => {
     if (!nama) return '';
     const nameLower = String(nama).toLowerCase().trim();
     
-    for (const key of Object.keys(gmailAccounts)) {
-      if (String(key).toLowerCase().trim() === nameLower) {
-        return gmailAccounts[key];
+    if (whatsappAccounts) {
+      for (const key of Object.keys(whatsappAccounts)) {
+        if (String(key).toLowerCase().trim() === nameLower) {
+          return whatsappAccounts[key];
+        }
+      }
+      for (const key of Object.keys(whatsappAccounts)) {
+        const kLower = String(key).toLowerCase().trim();
+        if (kLower.includes(nameLower) || nameLower.includes(kLower)) {
+          return whatsappAccounts[key];
+        }
       }
     }
-    for (const key of Object.keys(gmailAccounts)) {
-      const kLower = String(key).toLowerCase().trim();
-      if (kLower.includes(nameLower) || nameLower.includes(kLower)) {
-        return gmailAccounts[key];
-      }
-    }
-    return '';
+    return gmailAccounts[nama] || '';
   };
 
   // Process and aggregate student ziyadah data (including weekly and monthly calculations)
@@ -416,7 +420,7 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder, currentUse
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
               {filteredAndSortedStudents.map((student, index) => {
                 const isExpanded = expandedStudent === student.nama;
-                const email = getStudentGmail(student.nama);
+                const waPhone = getStudentWhatsapp(student.nama);
                 return (
                   <React.Fragment key={`db-row-${student.nama}`}>
                     <tr className={`hover:bg-slate-50/65 transition-all ${isExpanded ? 'bg-blue-50/20' : ''}`}>
@@ -437,8 +441,10 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder, currentUse
                           </div>
                           <div>
                             <span className="block">{student.nama}</span>
-                            {email && (
-                              <span className="text-[9px] text-slate-400 font-bold block">{email}</span>
+                            {waPhone && (
+                              <span className="text-[9px] text-emerald-600 font-bold block flex items-center gap-1">
+                                No. WA: {waPhone}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -482,13 +488,13 @@ export function DatabaseTab({ setoran, gmailAccounts, onSendReminder, currentUse
                             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </button>
 
-                          {email && onSendReminder && (
+                          {onSendWhatsapp && (
                             <button
-                              onClick={() => onSendReminder(student.nama, email)}
-                              className="p-1.5 text-blue-600 hover:text-white hover:bg-[#0000FE] rounded-lg border border-blue-200 transition-all cursor-pointer"
-                              title={`Forward Notifikasi ke ${email}`}
+                              onClick={() => onSendWhatsapp(student.nama, waPhone)}
+                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                              title={`Kirim Penilaian & Tugas Harian ke WhatsApp ${student.nama}`}
                             >
-                              <Mail className="w-3.5 h-3.5" />
+                              <span>Kirim WA</span>
                             </button>
                           )}
                         </div>
