@@ -54,7 +54,7 @@ const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.addScope('https://www.googleapis.com/auth/gmail.send');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
 googleAuthProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
-import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH, DEMO_AKUN, DEMO_BERITA } from './data';
+import { DEMO_SETORAN, DEMO_TUGAS_HARIAN, getSatuanByKegiatan, GOOGLE_APPS_SCRIPT_CODE, DEMO_CAPAIAN_TARGET_ZIYADAH, DEMO_AKUN, DEMO_BERITA, processAccountsFromResponse } from './data';
 import { StatsCard } from './components/StatsCard';
 import { NewAssessmentForm } from './components/NewAssessmentForm';
 import { StudentDetailModal } from './components/StudentDetailModal';
@@ -1438,51 +1438,55 @@ export default function App() {
   };
 
   // Fetch Accounts list from Google Sheets database
-  const fetchAccounts = async (url: string): Promise<void> => {
+  const fetchAccounts = async (url: string, resData?: any): Promise<void> => {
     if (!url) return;
     try {
-      const separator = url.includes('?') ? '&' : '?';
-      const response = await fetch(`${url}${separator}tab=akun`, {
-        method: 'GET',
-        mode: 'cors',
-        headers: {
-          'Accept': 'application/json',
+      let res = resData;
+      if (!res) {
+        const separator = url.includes('?') ? '&' : '?';
+        const response = await fetch(`${url}${separator}tab=akun`, {
+          method: 'GET',
+          mode: 'cors',
+          headers: {
+            'Accept': 'application/json',
+          }
+        });
+        if (response.ok) {
+          res = await response.json();
         }
-      });
-      if (response.ok) {
-        const res = await response.json();
-        if (res && res.status === 'success' && Array.isArray(res.data) && res.data.length > 0) {
-          const cleanAccounts = res.data.filter((acc: any) => acc && acc.id && acc.nama);
-          setAllAccounts(cleanAccounts);
-          localStorage.setItem('tahfizh_all_accounts', JSON.stringify(cleanAccounts));
+      }
 
-          // Sync database G-MAIL column with local profile gmailAccounts
-          setGmailAccounts(prev => {
-            const updated = { ...prev };
-            cleanAccounts.forEach((acc: any) => {
-              if (acc.nama && acc.gmail) {
-                updated[acc.nama] = acc.gmail;
-              }
-            });
-            localStorage.setItem('tahfizh_gmail_accounts', JSON.stringify(updated));
-            return updated;
-          });
+      const cleanAccounts = processAccountsFromResponse(res, setoran, capaianZiyadah);
+      if (cleanAccounts && cleanAccounts.length > 0) {
+        setAllAccounts(cleanAccounts);
+        localStorage.setItem('tahfizh_all_accounts', JSON.stringify(cleanAccounts));
 
-          // Sync current logged-in/simulated user session's gmail with the database value
-          setCurrentUser(prevUser => {
-            if (!prevUser) return null;
-            const matchedAccount = cleanAccounts.find((acc: any) => 
-              (acc && acc.nama && prevUser.nama && acc.nama === prevUser.nama) || 
-              (acc && acc.id && prevUser.id && acc.id === prevUser.id)
-            );
-            if (matchedAccount && matchedAccount.gmail && matchedAccount.gmail !== prevUser.gmail) {
-              const updatedSession = { ...prevUser, gmail: matchedAccount.gmail };
-              localStorage.setItem('tahfizh_user_session', JSON.stringify(updatedSession));
-              return updatedSession;
+        // Sync database G-MAIL column with local profile gmailAccounts
+        setGmailAccounts(prev => {
+          const updated = { ...prev };
+          cleanAccounts.forEach((acc: any) => {
+            if (acc.nama && acc.gmail) {
+              updated[acc.nama] = acc.gmail;
             }
-            return prevUser;
           });
-        }
+          localStorage.setItem('tahfizh_gmail_accounts', JSON.stringify(updated));
+          return updated;
+        });
+
+        // Sync current logged-in/simulated user session's gmail with the database value
+        setCurrentUser(prevUser => {
+          if (!prevUser) return null;
+          const matchedAccount = cleanAccounts.find((acc: any) => 
+            (acc && acc.nama && prevUser.nama && acc.nama.toLowerCase() === prevUser.nama.toLowerCase()) || 
+            (acc && acc.id && prevUser.id && acc.id.toLowerCase() === prevUser.id.toLowerCase())
+          );
+          if (matchedAccount && matchedAccount.gmail && matchedAccount.gmail !== prevUser.gmail) {
+            const updatedSession = { ...prevUser, gmail: matchedAccount.gmail };
+            localStorage.setItem('tahfizh_user_session', JSON.stringify(updatedSession));
+            return updatedSession;
+          }
+          return prevUser;
+        });
       }
     } catch (err) {
       console.error('Failed to fetch accounts from sheet database:', err);

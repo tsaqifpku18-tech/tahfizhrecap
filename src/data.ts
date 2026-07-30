@@ -174,15 +174,158 @@ export const DEMO_SETORAN: Setoran[] = RAW_DEMO_SETORAN.map(item => ({
 }));
 
 export const DEMO_AKUN: UserAccount[] = [
-  { id: "ustadz1", nama: "Ustadz Ahmad", password: "password123" },
-  { id: "ustadz2", nama: "Ustadzah Rania", password: "password123" },
-  { id: "student_kean", nama: "Kean", password: "kean123" },
-  { id: "student_azzam", nama: "Azzam", password: "azzam123" },
-  { id: "student_ahmad", nama: "Ahmad", password: "ahmad123" },
-  { id: "student_fathir", nama: "Fathir", password: "fathir123" },
-  { id: "student_zaid", nama: "Zaid", password: "zaid123" },
-  { id: "student_rania", nama: "Rania", password: "rania123" }
+  { id: "admin", nama: "Admin Tahfizh", password: "password123", role: "admin" },
+  { id: "ustadz1", nama: "Ustadz Ahmad", password: "password123", role: "ustadz" },
+  { id: "ustadz2", nama: "Ustadzah Rania", password: "password123", role: "ustadz" },
+  { id: "student_kean", nama: "Kean", password: "kean123", role: "siswa" },
+  { id: "student_azzam", nama: "Azzam", password: "azzam123", role: "siswa" },
+  { id: "student_ahmad", nama: "Ahmad", password: "ahmad123", role: "siswa" },
+  { id: "student_fathir", nama: "Fathir", password: "fathir123", role: "siswa" },
+  { id: "student_zaid", nama: "Zaid", password: "zaid123", role: "siswa" },
+  { id: "student_rania", nama: "Rania", password: "rania123", role: "siswa" }
 ];
+
+export function processAccountsFromResponse(res: any, setoranList: any[] = [], capaianList: any[] = []): UserAccount[] {
+  let rawAccounts: any[] = [];
+
+  if (res) {
+    // Priority 1: res.akun if array and non-empty
+    if (Array.isArray(res.akun) && res.akun.length > 0) {
+      rawAccounts = res.akun;
+    }
+    // Priority 2: res.data if items look like account objects (have id/nama and no Siswa or TanggalSetoran or baris)
+    else if (Array.isArray(res.data) && res.data.length > 0) {
+      const first = res.data[0];
+      const isSetoran = first && (first.Siswa || first.tanggalSetoran || first.Tanggal || first.kegiatan || first.baris !== undefined);
+      if (!isSetoran) {
+        rawAccounts = res.data;
+      }
+    }
+    // Priority 3: res.accounts if present
+    else if (Array.isArray(res.accounts) && res.accounts.length > 0) {
+      rawAccounts = res.accounts;
+    }
+  }
+
+  const result: UserAccount[] = [];
+  const existingKeys = new Set<string>();
+
+  // Process fetched accounts
+  rawAccounts.forEach((acc: any) => {
+    if (!acc) return;
+    const idStr = String(acc.id || acc.ID || acc.nama || '').trim();
+    const namaStr = String(acc.nama || acc.Nama || acc.Namaa || acc.id || '').trim();
+    if (!idStr && !namaStr) return;
+
+    const lowerId = idStr.toLowerCase();
+    const lowerNama = namaStr.toLowerCase();
+
+    // Role estimation if not provided
+    let role = acc.role;
+    if (!role) {
+      if (lowerNama.includes('admin') || lowerId.includes('admin')) role = 'admin';
+      else if (lowerNama.includes('ustadz') || lowerId.includes('ustadz')) role = 'ustadz';
+      else role = 'siswa';
+    }
+
+    result.push({
+      id: idStr,
+      nama: namaStr,
+      password: String(acc.password !== undefined && acc.password !== null ? acc.password : 'password123').trim(),
+      gmail: acc.gmail || acc.Gmail || acc.email || '',
+      grade: acc.grade || acc.Grade || '',
+      role: role
+    });
+
+    if (lowerId) existingKeys.add(lowerId);
+    if (lowerNama) existingKeys.add(lowerNama);
+  });
+
+  // Always include standard demo accounts & default staff credentials
+  DEMO_AKUN.forEach((acc) => {
+    const lowerId = acc.id.toLowerCase();
+    const lowerNama = acc.nama.toLowerCase();
+    if (!existingKeys.has(lowerId) && !existingKeys.has(lowerNama)) {
+      result.push(acc);
+      existingKeys.add(lowerId);
+      existingKeys.add(lowerNama);
+    }
+  });
+
+  // Extra default admins/ustadz
+  const defaultStaff = [
+    { id: 'admin', nama: 'Admin Tahfizh', password: 'password123', role: 'admin' as const },
+    { id: 'admin1', nama: 'Admin 1', password: 'password123', role: 'admin' as const },
+    { id: 'ustadz1', nama: 'Ustadz Ahmad', password: 'password123', role: 'ustadz' as const },
+    { id: 'ustadz2', nama: 'Ustadzah Rania', password: 'password123', role: 'ustadz' as const },
+    { id: 'ustadz_tsaqif', nama: 'Ustadz Tsaqif', password: 'password123', role: 'ustadz' as const },
+    { id: 'tsaqif', nama: 'Ustadz Tsaqif', password: 'password123', role: 'ustadz' as const },
+    { id: 'ustadz_syuja', nama: 'Ustadz Syuja', password: 'password123', role: 'ustadz' as const },
+    { id: 'syuja', nama: 'Ustadz Syuja', password: 'password123', role: 'ustadz' as const },
+  ];
+
+  defaultStaff.forEach((staff) => {
+    const lowerId = staff.id.toLowerCase();
+    const lowerNama = staff.nama.toLowerCase();
+    if (!existingKeys.has(lowerId) && !existingKeys.has(lowerNama)) {
+      result.push(staff);
+      existingKeys.add(lowerId);
+      existingKeys.add(lowerNama);
+    }
+  });
+
+  // Collect all unique student names from setoranList and capaianList
+  const studentMap = new Map<string, string>(); // lowerName -> originalName
+  
+  const addStudentName = (rawName: string) => {
+    if (!rawName) return;
+    const nameTrimmed = String(rawName).trim();
+    if (!nameTrimmed) return;
+    const lower = nameTrimmed.toLowerCase();
+    if (!studentMap.has(lower)) {
+      studentMap.set(lower, nameTrimmed);
+    }
+  };
+
+  if (Array.isArray(setoranList)) {
+    setoranList.forEach((s: any) => addStudentName(s.nama || s.Siswa));
+  }
+  if (Array.isArray(capaianList)) {
+    capaianList.forEach((c: any) => addStudentName(c.nama || c.Nama || c.siswa));
+  }
+
+  // Auto-generate student accounts for any students found in Sheets data
+  studentMap.forEach((originalName, lowerName) => {
+    const cleanId = lowerName.replace(/\s+/g, '_');
+    const studentAccId = `student_${cleanId}`;
+
+    if (!existingKeys.has(lowerName) && !existingKeys.has(cleanId) && !existingKeys.has(studentAccId)) {
+      let matchedGrade = '';
+      if (Array.isArray(capaianList)) {
+        const found = capaianList.find((c: any) => (c.nama || c.Nama || '').trim().toLowerCase() === lowerName);
+        if (found) matchedGrade = found.grade || found.Grade || '';
+      }
+      if (!matchedGrade && Array.isArray(setoranList)) {
+        const found = setoranList.find((s: any) => (s.nama || s.Siswa || '').trim().toLowerCase() === lowerName);
+        if (found) matchedGrade = found.grade || found.Grade || '';
+      }
+
+      const firstWord = lowerName.split(' ')[0];
+      result.push({
+        id: studentAccId,
+        nama: originalName,
+        password: `${firstWord}123`,
+        grade: matchedGrade,
+        role: 'siswa'
+      });
+      existingKeys.add(lowerName);
+      existingKeys.add(cleanId);
+      existingKeys.add(studentAccId);
+    }
+  });
+
+  return result;
+}
 
 export const DEMO_TUGAS_HARIAN: TugasHarian[] = [
   {
