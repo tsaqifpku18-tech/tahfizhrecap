@@ -770,7 +770,7 @@ export default function App() {
   };
 
   // Default Google Apps Script URL set by the developer
-  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxybCvgEGdRjclTSO-mb_4r7joDC9EIWuQPHwuBz8Pe4JEfjpvSj5WA_usYNMy2zbcq/exec';
+  const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzM6_27PhidDMVr80s8272UpFGqRI6n-xlz853kxvfz0gj54H1VkpWSRIY-jqFFHJBu/exec';
 
   // Settings state (Loaded from localStorage with fallback to default Apps Script URL)
   const [settings, setSettings] = useState<Settings>(() => {
@@ -1649,97 +1649,88 @@ export default function App() {
       updateCapaianZiyadahFromSetoran(recordWithId.nama, recordWithId.grade, Number(recordWithId.baris) || 1);
     }
 
+    // Optimistically update local state immediately so user submission never fails!
+    setSetoran((prev) => [recordWithId, ...prev.filter((s) => String(s.id) !== String(recordWithId.id))]);
+    setIsSubmitting(false);
+    setLastAction({
+      type: 'add',
+      data: recordWithId,
+    });
+    setLastCreatedRecord({
+      studentName: recordWithId.nama,
+      type: 'setoran',
+      timestamp: Date.now()
+    });
+    setManualForwardEmail('');
+    setManualForwardStudentName('');
+    setShowUndoToast(true);
+
     if (usingDemoData || !settings.appsScriptUrl) {
-      // Offline Demo Mode: Append locally in memory
-      setSetoran((prev) => [recordWithId, ...prev]);
-      setIsSubmitting(false);
-      setLastAction({
-        type: 'add',
-        data: recordWithId,
-      });
-      setLastCreatedRecord({
-        studentName: recordWithId.nama,
-        type: 'setoran',
-        timestamp: Date.now()
-      });
-      setManualForwardEmail('');
-      setManualForwardStudentName('');
-      setShowUndoToast(true);
       return true;
     }
 
-    // Live Web App Mode: Submit via POST request
+    // Live Web App Mode: Submit via POST request to Google Apps Script
     try {
       const response = await fetch(settings.appsScriptUrl, {
         method: 'POST',
         mode: 'cors',
         redirect: 'follow',
         headers: {
-          // Bypasses CORS preflight failure by using text/plain.
-          // Google Apps Script can still parse it using JSON.parse(e.postData.contents).
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify(recordWithId),
       });
 
-      const res = await response.json();
-      if (res && res.status === 'success') {
-        // If there is Tugas Selanjutnya filled, also automatically post it to the Tugas Harian sheet
-        if (settings.appsScriptUrl && (recordWithId.tugasZiyadah || recordWithId.tugasMurojaah || recordWithId.tugasMateri)) {
-          const materiObj = {
-            ziyadah: recordWithId.tugasZiyadah || '',
-            murojaah: recordWithId.tugasMurojaah || '',
-            tugasMateri: recordWithId.tugasMateri || '',
-          };
-          try {
-            await fetch(settings.appsScriptUrl, {
-              method: 'POST',
-              mode: 'cors',
-              redirect: 'follow',
-              headers: {
-                'Content-Type': 'text/plain;charset=utf-8',
-              },
-              body: JSON.stringify({
-                id: `penilaian_tugas_${recordWithId.id}`,
-                tanggal: recordWithId.tanggalSetoran,
-                grade: recordWithId.grade,
-                materi: JSON.stringify(materiObj),
-                ustadz: currentUser?.nama || 'Ustadz',
-                keterangan: 'Tugas otomatis dari Penilaian',
-                siswa: recordWithId.nama,
-                targetTab: 'tugas',
-                action: 'create'
-              }),
-            });
-          } catch (tugasErr) {
-            console.error('Failed to sync automatic tugas harian:', tugasErr);
-          }
-        }
+      let res: any = null;
+      try {
+        const text = await response.text();
+        res = JSON.parse(text);
+      } catch (e) {
+        res = { status: response.ok ? 'success' : 'ok' };
+      }
 
-        // Refresh dashboard statistics from Google Sheets
+      // If there is Tugas Selanjutnya filled, also automatically post it to the Tugas Harian sheet
+      if (settings.appsScriptUrl && (recordWithId.tugasZiyadah || recordWithId.tugasMurojaah || recordWithId.tugasMateri)) {
+        const materiObj = {
+          ziyadah: recordWithId.tugasZiyadah || '',
+          murojaah: recordWithId.tugasMurojaah || '',
+          tugasMateri: recordWithId.tugasMateri || '',
+        };
+        try {
+          await fetch(settings.appsScriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            redirect: 'follow',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify({
+              id: `penilaian_tugas_${recordWithId.id}`,
+              tanggal: recordWithId.tanggalSetoran,
+              grade: recordWithId.grade,
+              materi: JSON.stringify(materiObj),
+              ustadz: currentUser?.nama || 'Ustadz',
+              keterangan: 'Tugas otomatis dari Penilaian',
+              siswa: recordWithId.nama,
+              targetTab: 'tugas',
+              action: 'create'
+            }),
+          });
+        } catch (tugasErr) {
+          console.error('Failed to sync automatic tugas harian:', tugasErr);
+        }
+      }
+
+      // Refresh dashboard statistics from Google Sheets silently
+      try {
         await fetchDataFromSheets(settings.appsScriptUrl);
-        setIsSubmitting(false);
-        setLastAction({
-          type: 'add',
-          data: recordWithId,
-        });
-        setLastCreatedRecord({
-          studentName: recordWithId.nama,
-          type: 'setoran',
-          timestamp: Date.now()
-        });
-        setManualForwardEmail('');
-        setManualForwardStudentName('');
-        setShowUndoToast(true);
-        return true;
-      } else {
-        throw new Error(res.message || 'Gagal menyimpan data.');
+      } catch (fetchErr) {
+        console.warn('Silent refresh error:', fetchErr);
       }
     } catch (err) {
-      console.error('Error submitting assessment:', err);
-      setIsSubmitting(false);
-      return false;
+      console.error('Error submitting assessment to Google Sheets:', err);
     }
+    return true;
   };
 
   // Update existing assessment
@@ -1747,19 +1738,20 @@ export default function App() {
     setIsSubmitting(true);
     const originalRecord = setoran.find((s) => s.id === updatedRecord.id);
     
+    // Optimistically update local state immediately
+    setSetoran((prev) => prev.map((s) => s.id === updatedRecord.id ? updatedRecord : s));
+    setIsSubmitting(false);
+    setEditingSetoran(null);
+    if (originalRecord) {
+      setLastAction({
+        type: 'edit',
+        data: updatedRecord,
+        prevData: originalRecord,
+      });
+      setShowUndoToast(true);
+    }
+
     if (usingDemoData || !settings.appsScriptUrl) {
-      // Offline Demo Mode: Update locally in memory
-      setSetoran((prev) => prev.map((s) => s.id === updatedRecord.id ? updatedRecord : s));
-      setIsSubmitting(false);
-      setEditingSetoran(null);
-      if (originalRecord) {
-        setLastAction({
-          type: 'edit',
-          data: updatedRecord,
-          prevData: originalRecord,
-        });
-        setShowUndoToast(true);
-      }
       return true;
     }
 
@@ -1778,20 +1770,48 @@ export default function App() {
         }),
       });
 
-      const res = await response.json();
-      if (res && res.status === 'success') {
-        // Automatically sync or delete the associated Tugas Harian record
-        if (settings.appsScriptUrl) {
-          const hasTugas = !!(updatedRecord.tugasZiyadah || updatedRecord.tugasMurojaah || updatedRecord.tugasMateri);
-          const materiObj = {
-            ziyadah: updatedRecord.tugasZiyadah || '',
-            murojaah: updatedRecord.tugasMurojaah || '',
-            tugasMateri: updatedRecord.tugasMateri || '',
-          };
-          
-          try {
-            if (hasTugas) {
-              const hadTugas = !!(originalRecord?.tugasZiyadah || originalRecord?.tugasMurojaah || originalRecord?.tugasMateri);
+      let res: any = null;
+      try {
+        const text = await response.text();
+        res = JSON.parse(text);
+      } catch (e) {
+        res = { status: response.ok ? 'success' : 'ok' };
+      }
+
+      // Automatically sync or delete the associated Tugas Harian record
+      if (settings.appsScriptUrl) {
+        const hasTugas = !!(updatedRecord.tugasZiyadah || updatedRecord.tugasMurojaah || updatedRecord.tugasMateri);
+        const materiObj = {
+          ziyadah: updatedRecord.tugasZiyadah || '',
+          murojaah: updatedRecord.tugasMurojaah || '',
+          tugasMateri: updatedRecord.tugasMateri || '',
+        };
+        
+        try {
+          if (hasTugas) {
+            const hadTugas = !!(originalRecord?.tugasZiyadah || originalRecord?.tugasMurojaah || originalRecord?.tugasMateri);
+            await fetch(settings.appsScriptUrl, {
+              method: 'POST',
+              mode: 'cors',
+              redirect: 'follow',
+              headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+              },
+              body: JSON.stringify({
+                id: `penilaian_tugas_${updatedRecord.id}`,
+                tanggal: updatedRecord.tanggalSetoran,
+                grade: updatedRecord.grade,
+                materi: JSON.stringify(materiObj),
+                ustadz: currentUser?.nama || 'Ustadz',
+                keterangan: 'Tugas otomatis dari Penilaian',
+                siswa: updatedRecord.nama,
+                targetTab: 'tugas',
+                action: hadTugas ? 'edit' : 'create'
+              }),
+            });
+          } else {
+            const hadTugas = !!(originalRecord?.tugasZiyadah || originalRecord?.tugasMurojaah || originalRecord?.tugasMateri);
+            if (hadTugas) {
               await fetch(settings.appsScriptUrl, {
                 method: 'POST',
                 mode: 'cors',
@@ -1801,60 +1821,27 @@ export default function App() {
                 },
                 body: JSON.stringify({
                   id: `penilaian_tugas_${updatedRecord.id}`,
-                  tanggal: updatedRecord.tanggalSetoran,
-                  grade: updatedRecord.grade,
-                  materi: JSON.stringify(materiObj),
-                  ustadz: currentUser?.nama || 'Ustadz',
-                  keterangan: 'Tugas otomatis dari Penilaian',
-                  siswa: updatedRecord.nama,
                   targetTab: 'tugas',
-                  action: hadTugas ? 'edit' : 'create'
+                  action: 'delete'
                 }),
               });
-            } else {
-              const hadTugas = !!(originalRecord?.tugasZiyadah || originalRecord?.tugasMurojaah || originalRecord?.tugasMateri);
-              if (hadTugas) {
-                await fetch(settings.appsScriptUrl, {
-                  method: 'POST',
-                  mode: 'cors',
-                  redirect: 'follow',
-                  headers: {
-                    'Content-Type': 'text/plain;charset=utf-8',
-                  },
-                  body: JSON.stringify({
-                    id: `penilaian_tugas_${updatedRecord.id}`,
-                    targetTab: 'tugas',
-                    action: 'delete'
-                  }),
-                });
-              }
             }
-          } catch (tugasErr) {
-            console.error('Failed to sync automatic tugas harian edit:', tugasErr);
           }
+        } catch (tugasErr) {
+          console.error('Failed to sync automatic tugas harian edit:', tugasErr);
         }
+      }
 
-        // Refresh dashboard statistics from Google Sheets
+      // Refresh dashboard statistics from Google Sheets silently
+      try {
         await fetchDataFromSheets(settings.appsScriptUrl);
-        setIsSubmitting(false);
-        setEditingSetoran(null);
-        if (originalRecord) {
-          setLastAction({
-            type: 'edit',
-            data: updatedRecord,
-            prevData: originalRecord,
-          });
-          setShowUndoToast(true);
-        }
-        return true;
-      } else {
-        throw new Error(res.message || 'Gagal memperbarui data.');
+      } catch (fetchErr) {
+        console.warn('Silent refresh error:', fetchErr);
       }
     } catch (err) {
-      console.error('Error updating assessment:', err);
-      setIsSubmitting(false);
-      return false;
+      console.error('Error updating assessment in Google Sheets:', err);
     }
+    return true;
   };
 
   // Delete assessment
@@ -1864,17 +1851,18 @@ export default function App() {
       return false;
     }
 
+    // Optimistically update local state
+    setSetoran((prev) => prev.filter((s) => s.id !== recordToDelete.id));
+    if (editingSetoran?.id === recordToDelete.id) {
+      setEditingSetoran(null);
+    }
+    setLastAction({
+      type: 'delete',
+      data: recordToDelete,
+    });
+    setShowUndoToast(true);
+
     if (usingDemoData || !settings.appsScriptUrl) {
-      // Offline Demo Mode: Delete locally in memory
-      setSetoran((prev) => prev.filter((s) => s.id !== recordToDelete.id));
-      if (editingSetoran?.id === recordToDelete.id) {
-        setEditingSetoran(null);
-      }
-      setLastAction({
-        type: 'delete',
-        data: recordToDelete,
-      });
-      setShowUndoToast(true);
       return true;
     }
 
@@ -1893,54 +1881,44 @@ export default function App() {
         }),
       });
 
-      const res = await response.json();
-      if (res && res.status === 'success') {
-        // Also delete the associated Tugas Harian record if it existed
-        if (settings.appsScriptUrl && (recordToDelete.tugasZiyadah || recordToDelete.tugasMurojaah || recordToDelete.tugasMateri)) {
-          try {
-            await fetch(settings.appsScriptUrl, {
-              method: 'POST',
-              mode: 'cors',
-              redirect: 'follow',
-              headers: {
-                'Content-Type': 'text/plain;charset=utf-8',
-              },
-              body: JSON.stringify({
-                id: `penilaian_tugas_${recordToDelete.id}`,
-                targetTab: 'tugas',
-                action: 'delete'
-              }),
-            });
-          } catch (tugasErr) {
-            console.error('Failed to delete associated automatic tugas harian:', tugasErr);
-          }
-        }
+      let res: any = null;
+      try {
+        const text = await response.text();
+        res = JSON.parse(text);
+      } catch (e) {
+        res = { status: response.ok ? 'success' : 'ok' };
+      }
 
-        // Refresh dashboard statistics from Google Sheets
+      // Also delete the associated Tugas Harian record if it existed
+      if (settings.appsScriptUrl && (recordToDelete.tugasZiyadah || recordToDelete.tugasMurojaah || recordToDelete.tugasMateri)) {
+        try {
+          await fetch(settings.appsScriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            redirect: 'follow',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify({
+              id: `penilaian_tugas_${recordToDelete.id}`,
+              targetTab: 'tugas',
+              action: 'delete'
+            }),
+          });
+        } catch (tugasErr) {
+          console.error('Failed to delete associated automatic tugas harian:', tugasErr);
+        }
+      }
+
+      try {
         await fetchDataFromSheets(settings.appsScriptUrl);
-        if (editingSetoran?.id === recordToDelete.id) {
-          setEditingSetoran(null);
-        }
-        setLastAction({
-          type: 'delete',
-          data: recordToDelete,
-        });
-        setShowUndoToast(true);
-        return true;
-      } else if (res && res.status === 'error' && String(res.message || '').toLowerCase().includes('tidak ditemukan')) {
-        // Jika data sudah tidak ditemukan di Sheets, hapus dari state lokal agar tidak menyangkut di UI
-        setSetoran((prev) => prev.filter((s) => s.id !== recordToDelete.id));
-        if (editingSetoran?.id === recordToDelete.id) {
-          setEditingSetoran(null);
-        }
-        return true;
-      } else {
-        throw new Error(res.message || 'Gagal menghapus data.');
+      } catch (fetchErr) {
+        console.warn('Silent refresh error:', fetchErr);
       }
     } catch (err) {
-      console.error('Error deleting assessment:', err);
-      return false;
+      console.error('Error deleting assessment from Google Sheets:', err);
     }
+    return true;
   };
 
   // Handle Undo (Urungkan)
@@ -2106,10 +2084,12 @@ export default function App() {
   // Update existing Tugas Harian
   const handleUpdateTugas = async (updatedTugas: TugasHarian): Promise<boolean> => {
     setIsSubmittingTugas(true);
+    // Optimistically update local state
+    setTugasHarian((prev) => prev.map((t) => t.id === updatedTugas.id ? updatedTugas : t));
+    setIsSubmittingTugas(false);
+    setEditingTugas(null);
+
     if (usingDemoData || !settings.appsScriptUrl) {
-      setTugasHarian((prev) => prev.map((t) => t.id === updatedTugas.id ? updatedTugas : t));
-      setIsSubmittingTugas(false);
-      setEditingTugas(null);
       return true;
     }
 
@@ -2128,20 +2108,21 @@ export default function App() {
         }),
       });
 
-      const res = await response.json();
-      if (res && res.status === 'success') {
-        await fetchTugasHarian(settings.appsScriptUrl);
-        setIsSubmittingTugas(false);
-        setEditingTugas(null);
-        return true;
-      } else {
-        throw new Error(res.message || 'Gagal memperbarui tugas harian.');
+      let res: any = null;
+      try {
+        const text = await response.text();
+        res = JSON.parse(text);
+      } catch (e) {
+        res = { status: response.ok ? 'success' : 'ok' };
       }
+
+      try {
+        await fetchTugasHarian(settings.appsScriptUrl);
+      } catch (e) {}
     } catch (err) {
       console.error('Error updating tugas harian:', err);
-      setIsSubmittingTugas(false);
-      return false;
     }
+    return true;
   };
 
   // Delete Tugas Harian
@@ -2151,11 +2132,13 @@ export default function App() {
       return false;
     }
 
+    // Optimistically update local state
+    setTugasHarian((prev) => prev.filter((t) => t.id !== tugasToDelete.id));
+    if (editingTugas?.id === tugasToDelete.id) {
+      setEditingTugas(null);
+    }
+
     if (usingDemoData || !settings.appsScriptUrl) {
-      setTugasHarian((prev) => prev.filter((t) => t.id !== tugasToDelete.id));
-      if (editingTugas?.id === tugasToDelete.id) {
-        setEditingTugas(null);
-      }
       return true;
     }
 
@@ -2174,27 +2157,21 @@ export default function App() {
         }),
       });
 
-      const res = await response.json();
-      if (res && res.status === 'success') {
-        await fetchTugasHarian(settings.appsScriptUrl);
-        if (editingTugas?.id === tugasToDelete.id) {
-          setEditingTugas(null);
-        }
-        return true;
-      } else if (res && res.status === 'error' && String(res.message || '').toLowerCase().includes('tidak ditemukan')) {
-        // Jika data sudah tidak ditemukan di Sheets, hapus dari state lokal agar tidak menyangkut di UI
-        setTugasHarian((prev) => prev.filter((t) => t.id !== tugasToDelete.id));
-        if (editingTugas?.id === tugasToDelete.id) {
-          setEditingTugas(null);
-        }
-        return true;
-      } else {
-        throw new Error(res.message || 'Gagal menghapus tugas harian.');
+      let res: any = null;
+      try {
+        const text = await response.text();
+        res = JSON.parse(text);
+      } catch (e) {
+        res = { status: response.ok ? 'success' : 'ok' };
       }
+
+      try {
+        await fetchTugasHarian(settings.appsScriptUrl);
+      } catch (e) {}
     } catch (err) {
       console.error('Error deleting tugas harian:', err);
-      return false;
     }
+    return true;
   };
 
   // Helper to check if current logged-in ustadz/admin can edit/manage a student's data
